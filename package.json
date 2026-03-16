@@ -1,0 +1,21 @@
+{
+  "name": "smart-agent",
+  "version": "1.0.0",
+  "description": "类似于DeepSeek的智能体",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "deepseek"
+  ],
+  "author": "",
+  "license": "MIT"
+}

@@ -4,12 +4,20 @@ const path = require('path');
 const SmartAgent = require('./agent');
 
 // 创建智能体实例
-const agent = new SmartAgent({
-  apiKey: 'your_openai_api_key_here',
-  name: 'SmartAgent',
-  version: '1.0.0',
-  logLevel: 'info'
-});
+console.log('正在初始化SmartAgent...');
+let agent;
+try {
+  agent = new SmartAgent({
+    apiKey: 'your_openai_api_key_here',
+    name: 'SmartAgent',
+    version: '1.0.0',
+    logLevel: 'info'
+  });
+  console.log('SmartAgent初始化成功');
+} catch (error) {
+  console.error('SmartAgent初始化失败:', error);
+  process.exit(1);
+}
 
 // 处理请求
 function handleRequest(req, res) {
@@ -97,9 +105,23 @@ function handleRequest(req, res) {
 const server = http.createServer(handleRequest);
 
 // 启动服务器
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3002;
 server.listen(PORT, () => {
   console.log(`服务器运行在 http://localhost:${PORT}`);
   console.log(`API端点: http://localhost:${PORT}/api/chat`);
   console.log(`前端页面: http://localhost:${PORT}`);
+});
+
+// 添加错误处理
+server.on('error', (error) => {
+  console.error('服务器错误:', error);
+});
+
+// 防止进程退出
+process.on('SIGINT', () => {
+  console.log('\n正在关闭服务器...');
+  server.close(() => {
+    console.log('服务器已关闭');
+    process.exit(0);
+  });
 });

@@ -167,6 +167,47 @@
       font-size: 14px;
       color: #666;
     }
+    
+    .copy-button {
+      background: none;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 2px 6px;
+      margin-top: 4px;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+    
+    .copy-button:hover {
+      background-color: #e0e0e0;
+      color: #333;
+    }
+    
+    .quick-replies {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 20px;
+      border-top: 1px solid #e0e0e0;
+      background-color: #fafafa;
+    }
+    
+    .quick-reply {
+      background-color: #e3f2fd;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      color: #1976d2;
+      transition: all 0.2s;
+    }
+    
+    .quick-reply:hover {
+      background-color: #bbdefb;
+    }
   </style>
 </head>
 <body>
@@ -183,6 +224,15 @@
         </div>
       </div>
       
+      <div class="quick-replies" id="quick-replies">
+        <button class="quick-reply" data-text="你好">你好</button>
+        <button class="quick-reply" data-text="讲个笑话">讲个笑话</button>
+        <button class="quick-reply" data-text="123 + 456">123 + 456</button>
+        <button class="quick-reply" data-text="100厘米等于多少米">单位转换</button>
+        <button class="quick-reply" data-text="32华氏度等于多少摄氏度">温度转换</button>
+        <button class="quick-reply" data-text="什么是Python">Python介绍</button>
+        <button class="quick-reply" data-text="你能做什么">功能介绍</button>
+      </div>
       <div class="chat-input">
         <input type="text" id="message-input" placeholder="请输入您的问题..." autocomplete="off">
         <button id="send-button">发送</button>
@@ -200,6 +250,40 @@
     const messageInput = document.getElementById('message-input');
     const sendButton = document.getElementById('send-button');
     const statusText = document.getElementById('status-text');
+    const quickRepliesContainer = document.getElementById('quick-replies');
+    
+    // 显示正在输入的提示
+    let typingIndicator = null;
+    
+    function showTypingIndicator() {
+      if (typingIndicator) return;
+      
+      typingIndicator = document.createElement('div');
+      typingIndicator.className = 'message bot-message';
+      typingIndicator.innerHTML = `
+        <div class="typing-indicator">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+      `;
+      chatMessages.appendChild(typingIndicator);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    function removeTypingIndicator() {
+      if (typingIndicator) {
+        typingIndicator.remove();
+        typingIndicator = null;
+      }
+    }
+    
+    // 获取当前时间格式化
+    function getCurrentTime() {
+      const now = new Date();
+      return now.getHours().toString().padStart(2, '0') + ':' + 
+             now.getMinutes().toString().padStart(2, '0');
+    }
     
     // 发送消息
     async function sendMessage() {
@@ -213,6 +297,7 @@
       // 显示正在输入状态
       statusText.textContent = '正在思考...';
       sendButton.disabled = true;
+      showTypingIndicator();
       
       try {
         // 调用API
@@ -229,10 +314,13 @@
         }
         
         const data = await response.json();
+        // 移除正在输入提示
+        removeTypingIndicator();
         // 添加机器人回复到聊天界面
         addMessage(data.response, 'bot');
       } catch (error) {
         console.error('Error:', error);
+        removeTypingIndicator();
         addMessage('抱歉，我在处理您的请求时遇到了问题。', 'bot');
       } finally {
         // 恢复状态
@@ -245,10 +333,38 @@
     function addMessage(text, type) {
       const messageDiv = document.createElement('div');
       messageDiv.className = `message ${type}-message`;
-      messageDiv.innerHTML = `<div class="message-content">${text}</div>`;
+      
+      const time = getCurrentTime();
+      messageDiv.innerHTML = `
+        <div class="message-content">${text}</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+          <button class="copy-button" onclick="copyMessage(this)">📋 复制</button>
+          <div style="font-size: 11px; color: #999;">${time}</div>
+        </div>
+      `;
+      
       chatMessages.appendChild(messageDiv);
-      // 滚动到底部
-      chatMessages.scrollTop = chatMessages.scrollHeight;
+      // 滚动到底部，使用平滑滚动
+      chatMessages.scrollTo({
+        top: chatMessages.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+    
+    // 复制消息内容
+    function copyMessage(button) {
+      const messageDiv = button.closest('.message');
+      const content = messageDiv.querySelector('.message-content').textContent;
+      
+      navigator.clipboard.writeText(content).then(() => {
+        const originalText = button.textContent;
+        button.textContent = '✅ 已复制';
+        setTimeout(() => {
+          button.textContent = originalText;
+        }, 2000);
+      }).catch(err => {
+        console.error('复制失败:', err);
+      });
     }
     
     // 事件监听
@@ -258,6 +374,18 @@
         sendMessage();
       }
     });
+    
+    // 快速回复按钮事件
+    quickRepliesContainer.addEventListener('click', (e) => {
+      if (e.target.classList.contains('quick-reply')) {
+        const text = e.target.getAttribute('data-text');
+        messageInput.value = text;
+        sendMessage();
+      }
+    });
+    
+    // 自动聚焦输入框
+    messageInput.focus();
   </script>
 </body>
 </html>

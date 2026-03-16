@@ -1,21 +1,17 @@
 {
   "name": "smart-agent",
   "version": "1.0.0",
-  "description": "类似于DeepSeek的智能体",
-  "main": "index.js",
+  "description": "一个智能对话助手",
+  "main": "start-server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "test": "node index.js"
+    "start": "node start-server.js",
+    "dev": "node start-server.js",
+    "test": "node test-agent.js"
   },
-  "dependencies": {
-    "dotenv": "^16.4.5"
-  },
-  "keywords": [
-    "ai",
-    "agent",
-    "deepseek"
-  ],
+  "keywords": ["ai", "chat", "agent"],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  }
 }

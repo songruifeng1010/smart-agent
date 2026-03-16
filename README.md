@@ -1,73 +1,73 @@
-# SmartAgent
+# SmartAgent - 智能对话助手
 
-一个类似于DeepSeek的智能体，基于OpenAI API构建。
+一个功能丰富的智能对话助手，支持多种功能。
 
 ## 功能特性
 
-- 基于OpenAI GPT模型的智能对话
-- 简单易用的API接口
-- 可配置的智能体参数
+- ✅ 情感检测和响应
+- ✅ 对话上下文记忆
+- ✅ 用户名记忆
+- ✅ 数学计算
+- ✅ 单位转换
+- ✅ 知识库回答（涵盖5大类别）
+- ✅ 笑话生成
+- ✅ 自然聊天响应
+- ✅ 缓存机制
 
-## 安装依赖
-
-```bash
-npm install
-```
-
-## 配置环境变量
-
-1. 复制 `.env` 文件并填写你的OpenAI API密钥：
-
-```env
-# OpenAI API Key
-OPENAI_API_KEY=your_openai_api_key_here
-
-# 智能体配置
-AGENT_NAME=SmartAgent
-AGENT_VERSION=1.0.0
-```
-
-## 使用方法
-
-### 基本使用
+## 本地运行
 
 ```bash
 npm start
 ```
 
-### 作为模块使用
+或直接运行：
 
-```javascript
-const SmartAgent = require('./agent');
-
-async function main() {
-  const agent = new SmartAgent();
-  const response = await agent.processMessage('你好，你是谁？');
-  console.log(response);
-}
-
-main();
+```bash
+node start-server.js
 ```
 
-## 项目结构
+## 部署到云平台
 
-```
-smart-agent/
-├── agent.js          # 智能体核心类
-├── index.js          # 主入口文件
-├── package.json      # 项目配置
-├── .env              # 环境变量
-└── README.md         # 项目说明
-```
+### 方案一：使用Render（推荐，免费）
+
+1. 访问 https://render.com
+2. 使用GitHub账号登录
+3. 点击 "New +" → "Web Service"
+4. 选择您的 smart-agent 仓库
+5. 配置：
+   - Name: smart-agent
+   - Region: 选择离您最近的
+   - Runtime: Node
+   - Build Command: (留空)
+   - Start Command: `npm start`
+6. 点击 "Create Web Service"
+
+### 方案二：使用Railway
+
+1. 访问 https://railway.app
+2. 使用GitHub账号登录
+3. 点击 "New Project" → "Deploy from GitHub repo"
+4. 选择您的 smart-agent 仓库
+5. 部署
+
+### 方案三：使用Vercel
+
+1. 访问 https://vercel.com
+2. 使用GitHub账号登录
+3. 点击 "New Project"
+4. 选择您的 smart-agent 仓库
+5. 点击 "Deploy"
+
+## 使用说明
+
+部署成功后，访问您的应用URL即可使用SmartAgent！
 
 ## 技术栈
 
 - Node.js
-- OpenAI API
-- Dotenv
+- JavaScript
+- 纯前端（HTML/CSS/JS）
 
-## 注意事项
+## 许可证
 
-- 请确保你有有效的OpenAI API密钥
-- 本项目使用GPT-3.5-turbo模型，你可以根据需要修改为其他模型
-- 调用OpenAI API会产生费用，请合理使用
+MIT

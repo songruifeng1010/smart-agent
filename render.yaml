@@ -1,0 +1,29 @@
+# Render配置文件
+# 参考文档: https://render.com/docs/yaml-spec
+
+# Web服务配置
+type: web
+name: smart-agent
+region: oregon
+
+# 环境配置
+env: node
+
+# 构建配置
+buildCommand: "echo '构建完成'"
+
+# 启动命令
+startCommand: "npm start"
+
+# 环境变量
+envVars:
+  - key: PORT
+    value: "3002"
+  - key: NODE_ENV
+    value: "production"
+
+# 健康检查
+healthCheckPath: "/health"
+
+# 自动部署
+autoDeploy: true

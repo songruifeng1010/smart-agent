@@ -619,100 +619,93 @@ class SmartAgent {
     }
   }
 
-  generateResponse(prompt) {
-    return new Promise((resolve, reject) => {
-      try {
-        const cacheKey = prompt.trim().toLowerCase();
-        if (this.cache.has(cacheKey)) {
-          const cachedData = this.cache.get(cacheKey);
-          if (Date.now() - cachedData.timestamp < this.cacheExpiry) {
-            // 更新缓存访问次数
+  // 处理缓存
+  handleCache(cacheKey) {
+    try {
+      if (this.cache && this.cache.has(cacheKey)) {
+        const cachedData = this.cache.get(cacheKey);
+        if (cachedData && Date.now() - cachedData.timestamp < this.cacheExpiry) {
+          // 更新缓存访问次数
+          if (this.cacheAccessCount) {
             const currentCount = this.cacheAccessCount.get(cacheKey) || 0;
             this.cacheAccessCount.set(cacheKey, currentCount + 1);
-            this.log('info', `从缓存获取响应: ${cacheKey}`);
-            resolve(cachedData.response);
-            return;
-          } else {
-            // 删除过期缓存
-            this.cache.delete(cacheKey);
-            this.cacheAccessCount.delete(cacheKey);
-            this.log('debug', `缓存过期: ${cacheKey}`);
           }
+          this.log('info', `从缓存获取响应: ${cacheKey}`);
+          return cachedData.response;
+        } else {
+          // 删除过期缓存
+          this.cache.delete(cacheKey);
+          if (this.cacheAccessCount) {
+            this.cacheAccessCount.delete(cacheKey);
+          }
+          this.log('debug', `缓存过期: ${cacheKey}`);
         }
-        
-        this.log('info', '正在调用OpenAI API...');
-        this.log('debug', 'API密钥:', this.apiKey ? '已设置' : '未设置');
-        
-        if (this.apiKey === 'your_openai_api_key_here') {
-          this.log('info', '使用模拟响应模式');
-          const cleanPrompt = prompt.toLowerCase().trim();
-          let mockResponse = '';
-          let skipCache = false;
-          
-          const knowledgeResult = this.getKnowledgeResponse(cleanPrompt);
-          if (knowledgeResult) {
-            mockResponse = knowledgeResult.response;
-            skipCache = knowledgeResult.skipCache;
+      }
+    } catch (error) {
+      this.log('error', '缓存处理错误:', error.message);
+    }
+    return null;
+  }
+
+  // 生成模拟响应
+  generateMockResponse(prompt) {
+    try {
+      const cleanPrompt = prompt.toLowerCase().trim();
+      let mockResponse = '';
+      let skipCache = false;
+      
+      const knowledgeResult = this.getKnowledgeResponse(cleanPrompt);
+      if (knowledgeResult) {
+        mockResponse = knowledgeResult.response;
+        skipCache = knowledgeResult.skipCache;
+      } else {
+        const calcResult = handleCalculation(cleanPrompt);
+        if (calcResult) {
+          mockResponse = calcResult;
+        } else {
+          const unitResult = handleUnitConversion(cleanPrompt, prompt);
+          if (unitResult) {
+            mockResponse = unitResult;
           } else {
-            const calcResult = handleCalculation(cleanPrompt);
-            if (calcResult) {
-              mockResponse = calcResult;
+            const weatherResult = handleWeatherQuery(cleanPrompt);
+            if (weatherResult) {
+              mockResponse = weatherResult;
             } else {
-              const unitResult = handleUnitConversion(cleanPrompt, prompt);
-              if (unitResult) {
-                mockResponse = unitResult;
+              const newsResult = handleNewsQuery(cleanPrompt);
+              if (newsResult) {
+                mockResponse = newsResult;
               } else {
-                const weatherResult = handleWeatherQuery(cleanPrompt);
-                if (weatherResult) {
-                  mockResponse = weatherResult;
+                const dateResult = handleDateCalculation(cleanPrompt);
+                if (dateResult) {
+                  mockResponse = dateResult;
                 } else {
-                  const newsResult = handleNewsQuery(cleanPrompt);
-                  if (newsResult) {
-                    mockResponse = newsResult;
+                  if (cleanPrompt.length < 15 || 
+                      cleanPrompt.includes('嗯') || 
+                      cleanPrompt.includes('哦') || 
+                      cleanPrompt.includes('啊') ||
+                      cleanPrompt.includes('哈')) {
+                    mockResponse = generateChatResponse(prompt, cleanPrompt, this.userName);
                   } else {
-                    const dateResult = handleDateCalculation(cleanPrompt);
-                    if (dateResult) {
-                      mockResponse = dateResult;
-                    } else {
-                      if (cleanPrompt.length < 15 || 
-                          cleanPrompt.includes('嗯') || 
-                          cleanPrompt.includes('哦') || 
-                          cleanPrompt.includes('啊') ||
-                          cleanPrompt.includes('哈')) {
-                        mockResponse = generateChatResponse(prompt, cleanPrompt, this.userName);
-                      } else {
-                        mockResponse = this.getFallbackResponse();
-                      }
-                    }
+                    mockResponse = this.getFallbackResponse();
                   }
                 }
               }
             }
           }
-          
-          this.log('debug', '模拟响应:', mockResponse);
-          
-          if (!skipCache) {
-            // 管理缓存大小
-            this.manageCache();
-            
-            // 设置缓存，初始化访问次数
-            this.cache.set(cacheKey, {
-              response: mockResponse,
-              timestamp: Date.now()
-            });
-            this.cacheAccessCount.set(cacheKey, 1);
-            this.log('debug', `缓存设置: ${cacheKey}`);
-          } else {
-            this.log('debug', '跳过缓存');
-          }
-          
-          const finalResponse = this.applyChatMode(mockResponse);
-          this.addToHistory(prompt, finalResponse);
-          resolve(finalResponse);
-          return;
         }
-        
+      }
+      
+      return { mockResponse, skipCache };
+    } catch (error) {
+      this.log('error', '生成模拟响应错误:', error.message);
+      return { mockResponse: this.getFallbackResponse(), skipCache: false };
+    }
+  }
+
+  // 调用OpenAI API
+  callOpenAIAPI(prompt, cacheKey) {
+    return new Promise((resolve) => {
+      try {
         const postData = JSON.stringify({
           model: 'gpt-3.5-turbo',
           messages: [
@@ -738,7 +731,8 @@ class SmartAgent {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Length': Buffer.byteLength(postData)
-          }
+          },
+          timeout: 30000
         };
 
         this.log('debug', '正在发送请求到:', options.hostname + options.path);
@@ -753,20 +747,40 @@ class SmartAgent {
 
           res.on('end', () => {
             try {
+              // 检查响应长度
+              if (!data || data.length === 0) {
+                this.log('error', 'API响应为空');
+                resolve('抱歉，我在处理您的请求时遇到了问题。');
+                return;
+              }
+              
               const responseData = JSON.parse(data);
               if (res.statusCode !== 200) {
                 this.log('error', 'API错误:', responseData);
-                resolve('抱歉，我在处理您的请求时遇到了问题。');
+                // 根据错误类型返回不同的提示
+                if (responseData.error && responseData.error.code === 'rate_limit_exceeded') {
+                  resolve('抱歉，API调用次数超限，请稍后再试。');
+                } else if (responseData.error && responseData.error.code === 'invalid_api_key') {
+                  resolve('抱歉，API密钥无效，请检查配置。');
+                } else {
+                  resolve('抱歉，我在处理您的请求时遇到了问题。');
+                }
               } else {
                 this.log('info', 'API响应成功');
-                const response = responseData.choices[0].message.content;
-                this.cache.set(cacheKey, {
-                  response: response,
-                  timestamp: Date.now()
-                });
-                const finalResponse = this.applyChatMode(response);
-                this.addToHistory(prompt, finalResponse);
-                resolve(finalResponse);
+                if (responseData.choices && responseData.choices.length > 0) {
+                  const response = responseData.choices[0].message.content;
+                  // 安全地设置缓存
+                  if (this.cache) {
+                    this.cache.set(cacheKey, {
+                      response: response,
+                      timestamp: Date.now()
+                    });
+                  }
+                  resolve(response);
+                } else {
+                  this.log('error', 'API响应格式错误: 缺少choices字段');
+                  resolve('抱歉，我在处理您的请求时遇到了问题。');
+                }
               }
             } catch (parseError) {
               this.log('error', '解析响应失败:', parseError);
@@ -777,7 +791,12 @@ class SmartAgent {
 
         req.on('error', (error) => {
           this.log('error', '请求错误:', error.message);
-          resolve('抱歉，我在处理您的请求时遇到了问题。');
+          // 根据错误类型返回不同的提示
+          if (error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+            resolve('抱歉，网络连接失败，请检查您的网络连接。');
+          } else {
+            resolve('抱歉，我在处理您的请求时遇到了问题。');
+          }
         });
 
         req.on('timeout', () => {
@@ -786,21 +805,115 @@ class SmartAgent {
           resolve('抱歉，请求超时，请稍后再试。');
         });
 
-        req.setTimeout(30000);
         req.write(postData);
         req.end();
       } catch (error) {
-        this.log('error', 'Error generating response:', error.message);
+        this.log('error', 'API请求准备错误:', error.message);
+        resolve('抱歉，我在处理您的请求时遇到了问题。');
+      }
+    });
+  }
+
+  generateResponse(prompt) {
+    return new Promise(async (resolve) => {
+      try {
+        // 验证输入
+        if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
+          this.log('error', '无效的输入: 提示为空或不是字符串');
+          resolve('抱歉，我无法处理空的请求。');
+          return;
+        }
+        
+        const cacheKey = prompt.trim().toLowerCase();
+        
+        // 检查缓存
+        const cachedResponse = this.handleCache(cacheKey);
+        if (cachedResponse) {
+          try {
+            const finalResponse = this.applyChatMode(cachedResponse);
+            this.addToHistory(prompt, finalResponse);
+            resolve(finalResponse);
+          } catch (cacheError) {
+            this.log('error', '处理缓存响应错误:', cacheError.message);
+            // 继续处理，不依赖缓存
+          } else {
+            return;
+          }
+        }
+        
+        this.log('info', '正在调用OpenAI API...');
+        this.log('debug', 'API密钥:', this.apiKey ? '已设置' : '未设置');
+        
+        let response;
+        if (this.apiKey === 'your_openai_api_key_here') {
+          this.log('info', '使用模拟响应模式');
+          const { mockResponse, skipCache } = this.generateMockResponse(prompt);
+          response = mockResponse;
+          
+          if (!skipCache && this.cache) {
+            try {
+              // 管理缓存大小
+              this.manageCache();
+              
+              // 设置缓存，初始化访问次数
+              this.cache.set(cacheKey, {
+                response: response,
+                timestamp: Date.now()
+              });
+              if (this.cacheAccessCount) {
+                this.cacheAccessCount.set(cacheKey, 1);
+              }
+              this.log('debug', `缓存设置: ${cacheKey}`);
+            } catch (cacheError) {
+              this.log('error', '设置缓存错误:', cacheError.message);
+              // 继续处理，不依赖缓存
+            }
+          } else {
+            this.log('debug', '跳过缓存');
+          }
+        } else {
+          // 调用OpenAI API
+          response = await this.callOpenAIAPI(prompt, cacheKey);
+        }
+        
+        // 确保响应有效
+        if (!response || typeof response !== 'string' || response.trim() === '') {
+          this.log('error', '无效的响应: 响应为空或不是字符串');
+          response = this.getFallbackResponse();
+        }
+        
+        try {
+          const finalResponse = this.applyChatMode(response);
+          this.addToHistory(prompt, finalResponse);
+          resolve(finalResponse);
+        } catch (finalError) {
+          this.log('error', '处理最终响应错误:', finalError.message);
+          resolve(response); // 直接返回原始响应
+        }
+      } catch (error) {
+        this.log('error', '生成响应错误:', error.message);
         resolve('抱歉，我在处理您的请求时遇到了问题。');
       }
     });
   }
 
   async processMessage(message) {
-    this.log('info', `[${this.name}] 收到消息: ${message}`);
-    const response = await this.generateResponse(message);
-    this.log('info', `[${this.name}] 回复: ${response}`);
-    return response;
+    try {
+      this.log('info', `[${this.name}] 收到消息: ${message}`);
+      
+      // 验证输入
+      if (!message || typeof message !== 'string' || message.trim() === '') {
+        this.log('error', '无效的消息: 消息为空或不是字符串');
+        return '抱歉，我无法处理空的请求。';
+      }
+      
+      const response = await this.generateResponse(message);
+      this.log('info', `[${this.name}] 回复: ${response}`);
+      return response;
+    } catch (error) {
+      this.log('error', '处理消息错误:', error.message);
+      return '抱歉，我在处理您的请求时遇到了问题。';
+    }
   }
 }
 

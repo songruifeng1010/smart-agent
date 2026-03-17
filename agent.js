@@ -15,6 +15,31 @@ class SmartAgent {
     
     this.userName = null;
     this.lastTopic = null;
+    
+    // 对话模式
+    this.chatMode = 'default'; // default, friendly, professional, casual
+    this.chatModes = {
+      default: {
+        name: '默认模式',
+        prefix: '',
+        suffix: ''
+      },
+      friendly: {
+        name: '友好模式',
+        prefix: '😊 ',
+        suffix: ' 希望能帮到你！'
+      },
+      professional: {
+        name: '专业模式',
+        prefix: '',
+        suffix: ''
+      },
+      casual: {
+        name: ' casual模式',
+        prefix: '嘿！',
+        suffix: ' 咋样？'
+      }
+    };
   }
   
   log(level, ...args) {
@@ -209,6 +234,19 @@ class SmartAgent {
   }
 
   getKnowledgeResponse(cleanPrompt) {
+    // 检测对话模式切换
+    if (cleanPrompt.includes('切换到') && (cleanPrompt.includes('模式') || cleanPrompt.includes('mode'))) {
+      if (cleanPrompt.includes('友好')) {
+        return { response: this.setChatMode('friendly'), skipCache: false };
+      } else if (cleanPrompt.includes('专业')) {
+        return { response: this.setChatMode('professional'), skipCache: false };
+      } else if (cleanPrompt.includes('casual')) {
+        return { response: this.setChatMode('casual'), skipCache: false };
+      } else if (cleanPrompt.includes('默认')) {
+        return { response: this.setChatMode('default'), skipCache: false };
+      }
+    }
+    
     const knowledge = {
       greetings: {
         keywords: ['你好', '您好', 'hi', 'hello', '早上好', '下午好', '晚上好', '嗨'],
@@ -281,6 +319,14 @@ class SmartAgent {
           '人工智能（AI）是计算机科学的重要分支，旨在创建能模拟人类智能的系统。现在AI已经应用在很多领域啦，比如语音识别、自动驾驶等等！',
           '人工智能是研究如何让计算机去做过去只有人类才能做的事情。它包括机器学习、深度学习、自然语言处理、计算机视觉等多个子领域。',
           'AI正在改变我们的世界！从智能手机上的语音助手，到电商网站的个性化推荐，从医疗诊断到自动驾驶，AI的应用越来越广泛。'
+        ]
+      },
+      chatMode: {
+        keywords: ['对话模式', '切换模式', '友好模式', '专业模式', 'casual模式', '默认模式'],
+        responses: [
+          '我支持多种对话模式：默认模式、友好模式、专业模式、casual模式。你可以说"切换到友好模式"来改变我的对话风格！',
+          '想切换对话模式吗？试试说"切换到专业模式"或"切换到casual模式"！',
+          '当前对话模式：{{chatMode}}。你可以随时切换其他模式哦！'
         ]
       },
       earth: {
@@ -583,6 +629,10 @@ class SmartAgent {
         } else {
           response = this.getRandomResponse(data.responses);
         }
+        // 替换占位符
+        if (response.includes('{{chatMode}}')) {
+          response = response.replace('{{chatMode}}', this.getChatMode());
+        }
         return { response, skipCache: data.skipCache || false };
       }
     }
@@ -605,6 +655,24 @@ class SmartAgent {
     if (this.conversationHistory.length > this.maxHistoryLength) {
       this.conversationHistory.shift();
     }
+  }
+
+  setChatMode(mode) {
+    if (this.chatModes[mode]) {
+      this.chatMode = mode;
+      return `已切换到${this.chatModes[mode].name}！`;
+    } else {
+      return `不支持的对话模式。支持的模式：${Object.keys(this.chatModes).join('、')}`;
+    }
+  }
+
+  getChatMode() {
+    return this.chatModes[this.chatMode].name;
+  }
+
+  applyChatMode(response) {
+    const mode = this.chatModes[this.chatMode];
+    return mode.prefix + response + mode.suffix;
   }
 
   generateResponse(prompt) {
@@ -668,8 +736,9 @@ class SmartAgent {
             this.log('debug', '跳过缓存');
           }
           
-          this.addToHistory(prompt, mockResponse);
-          resolve(mockResponse);
+          const finalResponse = this.applyChatMode(mockResponse);
+          this.addToHistory(prompt, finalResponse);
+          resolve(finalResponse);
           return;
         }
         
@@ -724,8 +793,9 @@ class SmartAgent {
                   response: response,
                   timestamp: Date.now()
                 });
-                this.addToHistory(prompt, response);
-                resolve(response);
+                const finalResponse = this.applyChatMode(response);
+                this.addToHistory(prompt, finalResponse);
+                resolve(finalResponse);
               }
             } catch (parseError) {
               this.log('error', '解析响应失败:', parseError);

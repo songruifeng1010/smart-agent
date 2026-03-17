@@ -1,4 +1,5 @@
 const https = require('https');
+const { getRandomResponse, detectEmotion, respondToEmotion, handleCalculation, handleUnitConversion, handleWeatherQuery, handleNewsQuery, handleDateCalculation, generateChatResponse, getFallbackResponse, extractLearningKeyword, calculateMatchScore } = require('./utils.js');
 
 class SmartAgent {
   constructor(config = {}) {
@@ -7,8 +8,11 @@ class SmartAgent {
     this.version = config.version || '1.0.0';
     this.logLevel = config.logLevel || 'info';
     
+    // 优化缓存管理
     this.cache = new Map();
-    this.cacheExpiry = 3600000;
+    this.cacheExpiry = 3600000; // 默认1小时
+    this.cacheSizeLimit = 1000; // 缓存大小限制
+    this.cacheAccessCount = new Map(); // 记录缓存访问次数
     
     this.conversationHistory = [];
     this.maxHistoryLength = 10;
@@ -51,190 +55,7 @@ class SmartAgent {
     }
   }
 
-  detectEmotion(prompt) {
-    const lower = prompt.toLowerCase();
-    if (lower.includes('开心') || lower.includes('高兴') || lower.includes('快乐') || lower.includes('哈哈')) {
-      return 'happy';
-    } else if (lower.includes('难过') || lower.includes('伤心') || lower.includes('生气') || lower.includes('郁闷')) {
-      return 'sad';
-    } else if (lower.includes('累') || lower.includes('困') || lower.includes('疲倦')) {
-      return 'tired';
-    } else if (lower.includes('谢谢') || lower.includes('感谢') || lower.includes('好棒') || lower.includes('厉害')) {
-      return 'grateful';
-    }
-    return 'neutral';
-  }
 
-  respondToEmotion(emotion) {
-    const responses = {
-      happy: [
-        '看到您开心我也很高兴！😊',
-        '真好！保持这份好心情！✨',
-        '开心就好！有什么我可以帮您的吗？'
-      ],
-      sad: [
-        '抱抱您～希望能让您感觉好一点 💙',
-        '听起来您心情不好，想聊聊吗？',
-        '都会好起来的！我在这里陪着您'
-      ],
-      tired: [
-        '辛苦了！注意休息哦 😴',
-        '累了就歇一会儿吧，身体最重要！',
-        '好好休息一下，恢复精力！'
-      ],
-      grateful: [
-        '您太客气了！能帮到您我很开心 😊',
-        '不客气！这是我应该做的～',
-        '谢谢您的认可！我会继续努力的！'
-      ],
-      neutral: []
-    };
-    const emoSuggestions = responses[emotion];
-    if (emoSuggestions && emoSuggestions.length > 0) {
-      return emoSuggestions[Math.floor(Math.random() * emoSuggestions.length)];
-    }
-    return null;
-  }
-
-  getRandomResponse(responses) {
-    return responses[Math.floor(Math.random() * responses.length)];
-  }
-
-  generateChatResponse(prompt, cleanPrompt) {
-    const emotion = this.detectEmotion(prompt);
-    const emotionResponse = this.respondToEmotion(emotion);
-    
-    if (emotionResponse && emotion !== 'neutral') {
-      return emotionResponse;
-    }
-
-    if (cleanPrompt.includes('我叫') || cleanPrompt.includes('我的名字是')) {
-      const nameMatch = prompt.match(/(?:我叫|我的名字是)\s*([^\s，。！？,.!?]+)/);
-      if (nameMatch) {
-        this.userName = nameMatch[1];
-        return `很高兴认识你，${this.userName}！以后我就这么叫你啦 😊`;
-      }
-    }
-
-    if (this.userName && (cleanPrompt.includes('我是谁') || cleanPrompt.includes('我的名字'))) {
-      return `你是${this.userName}呀！我记得你 😊`;
-    }
-
-    const chatResponses = [
-      '嗯，我在听呢～继续说吧！',
-      '有意思！能告诉我更多吗？',
-      '原来是这样～还有呢？',
-      '我明白了，你接着说！',
-      '嗯嗯，我懂你的意思。',
-      '好的，我在认真听着呢！'
-    ];
-
-    return this.getRandomResponse(chatResponses);
-  }
-
-  handleCalculation(cleanPrompt) {
-    const calcMatch = cleanPrompt.match(/(\d+\.?\d*)\s*[+\-*/]\s*(\d+\.?\d*)/);
-    if (calcMatch) {
-      try {
-        const num1 = parseFloat(calcMatch[1]);
-        const num2 = parseFloat(calcMatch[2]);
-        let result;
-        let operator;
-        
-        if (cleanPrompt.includes('+')) {
-          result = num1 + num2;
-          operator = '加';
-        } else if (cleanPrompt.includes('-')) {
-          result = num1 - num2;
-          operator = '减';
-        } else if (cleanPrompt.includes('*')) {
-          result = num1 * num2;
-          operator = '乘';
-        } else if (cleanPrompt.includes('/')) {
-          if (num2 === 0) {
-            return '抱歉，除数不能为零哦！';
-          }
-          result = num1 / num2;
-          operator = '除';
-        }
-        
-        if (result !== undefined) {
-          const calcResponses = [
-            `让我算一下... ${num1} ${operator} ${num2} = ${result}`,
-            `嗯... ${num1} ${operator} ${num2} 等于 ${result}`,
-            `算出来啦！${num1} ${operator} ${num2} = ${result}`
-          ];
-          return this.getRandomResponse(calcResponses);
-        }
-      } catch (e) {
-        return '抱歉，计算时出了点小问题...';
-      }
-    }
-    return null;
-  }
-
-  handleUnitConversion(cleanPrompt, prompt) {
-    const unitKeywords = ['厘米', '米', '千克', '克', '摄氏度', '华氏度', '公里', '英里'];
-    if (unitKeywords.some(kw => cleanPrompt.includes(kw))) {
-      const numberMatch = prompt.match(/(\d+\.?\d*)/);
-      if (numberMatch) {
-        const num = parseFloat(numberMatch[1]);
-        let result = null;
-        
-        if (cleanPrompt.includes('厘米') && cleanPrompt.includes('米')) {
-          if (cleanPrompt.indexOf('厘米') < (cleanPrompt.indexOf('等于') !== -1 ? cleanPrompt.indexOf('等于') : cleanPrompt.length)) {
-            result = `${num}厘米 = ${num / 100}米`;
-          } else {
-            result = `${num}米 = ${num * 100}厘米`;
-          }
-        } else if (cleanPrompt.includes('千克') && cleanPrompt.includes('克')) {
-          if (cleanPrompt.indexOf('千克') < (cleanPrompt.indexOf('等于') !== -1 ? cleanPrompt.indexOf('等于') : cleanPrompt.length)) {
-            result = `${num}千克 = ${num * 1000}克`;
-          } else {
-            result = `${num}克 = ${num / 1000}千克`;
-          }
-        } else if (cleanPrompt.includes('摄氏度') && cleanPrompt.includes('华氏度')) {
-          if (cleanPrompt.indexOf('摄氏度') < (cleanPrompt.indexOf('等于') !== -1 ? cleanPrompt.indexOf('等于') : cleanPrompt.length)) {
-            result = `${num}摄氏度 = ${(num * 9/5 + 32).toFixed(1)}华氏度`;
-          } else {
-            result = `${num}华氏度 = ${((num - 32) * 5/9).toFixed(1)}摄氏度`;
-          }
-        } else if (cleanPrompt.includes('公里') && cleanPrompt.includes('英里')) {
-          if (cleanPrompt.indexOf('公里') < (cleanPrompt.indexOf('等于') !== -1 ? cleanPrompt.indexOf('等于') : cleanPrompt.length)) {
-            result = `${num}公里 = ${(num * 0.621371).toFixed(2)}英里`;
-          } else {
-            result = `${num}英里 = ${(num / 0.621371).toFixed(2)}公里`;
-          }
-        } else if (cleanPrompt.includes('厘米')) {
-          result = `${num}厘米 = ${num / 100}米`;
-        } else if (cleanPrompt.includes('米')) {
-          result = `${num}米 = ${num * 100}厘米`;
-        } else if (cleanPrompt.includes('千克')) {
-          result = `${num}千克 = ${num * 1000}克`;
-        } else if (cleanPrompt.includes('克')) {
-          result = `${num}克 = ${num / 1000}千克`;
-        } else if (cleanPrompt.includes('摄氏度')) {
-          result = `${num}摄氏度 = ${(num * 9/5 + 32).toFixed(1)}华氏度`;
-        } else if (cleanPrompt.includes('华氏度')) {
-          result = `${num}华氏度 = ${((num - 32) * 5/9).toFixed(1)}摄氏度`;
-        } else if (cleanPrompt.includes('公里')) {
-          result = `${num}公里 = ${(num * 0.621371).toFixed(2)}英里`;
-        } else if (cleanPrompt.includes('英里')) {
-          result = `${num}英里 = ${(num / 0.621371).toFixed(2)}公里`;
-        }
-        
-        if (result) {
-          const unitResponses = [
-            `好的，这就帮您转换～ ${result}`,
-            `让我看看... ${result}`,
-            `转换好啦！${result}`
-          ];
-          return this.getRandomResponse(unitResponses);
-        }
-      }
-    }
-    return null;
-  }
 
   getKnowledgeResponse(cleanPrompt) {
     // 检测对话模式切换
@@ -260,14 +81,25 @@ class SmartAgent {
     
     // 首先检查动态学习的知识库
     if (this.knowledge) {
+      // 优化匹配算法：计算匹配度，选择最相关的结果
+      let bestMatch = null;
+      let highestScore = 0;
+      
       for (const [cat, data] of Object.entries(this.knowledge)) {
         // 确保data和data.keywords存在
         if (data && data.keywords) {
-          if (data.keywords.some(kw => cleanPrompt.includes(kw.toLowerCase()))) {
-            const response = this.getRandomResponse(data.responses);
-            return { response, skipCache: false };
+          const score = calculateMatchScore(cleanPrompt, data.keywords);
+          
+          if (score > highestScore) {
+            highestScore = score;
+            bestMatch = data;
           }
         }
+      }
+      
+      if (bestMatch) {
+        const response = getRandomResponse(bestMatch.responses);
+        return { response, skipCache: false };
       }
     }
     
@@ -646,33 +478,38 @@ class SmartAgent {
       }
     };
 
+    // 优化基础知识库匹配算法：计算匹配度，选择最相关的结果
+    let bestBaseMatch = null;
+    let highestBaseScore = 0;
+    
     for (const [cat, data] of Object.entries(baseKnowledge)) {
-      if (data.keywords.some(kw => cleanPrompt.includes(kw.toLowerCase()))) {
-        let response;
-        if (typeof data.responses[0] === 'function') {
-          response = data.responses[0]();
-        } else {
-          response = this.getRandomResponse(data.responses);
-        }
-        // 替换占位符
-        if (response.includes('{{chatMode}}')) {
-          response = response.replace('{{chatMode}}', this.getChatMode());
-        }
-        return { response, skipCache: data.skipCache || false };
+      const score = calculateMatchScore(cleanPrompt, data.keywords);
+      
+      if (score > highestBaseScore) {
+        highestBaseScore = score;
+        bestBaseMatch = { cat, data };
       }
     }
+    
+    if (bestBaseMatch) {
+      let response;
+      if (typeof bestBaseMatch.data.responses[0] === 'function') {
+        response = bestBaseMatch.data.responses[0]();
+      } else {
+        response = getRandomResponse(bestBaseMatch.data.responses);
+      }
+      // 替换占位符
+      if (response.includes('{{chatMode}}')) {
+        response = response.replace('{{chatMode}}', this.getChatMode());
+      }
+      return { response, skipCache: bestBaseMatch.data.skipCache || false };
+    }
+    
     return null;
   }
 
   getFallbackResponse() {
-    const responses = [
-      '嗯...这个问题我得想想。要不我们聊点别的？',
-      '这个话题有点超出我的知识库了，换个话题聊聊？',
-      '不好意思，我暂时回答不了这个问题...你想让我帮你计算点什么吗？',
-      '让我想想...要不试试问我一些简单的问题？比如计算或者单位转换？',
-      '这个问题很有意思！不过我现在还回答不了...要不要听个笑话？'
-    ];
-    return this.getRandomResponse(responses);
+    return getFallbackResponse();
   }
 
   addToHistory(userMessage, botResponse) {
@@ -718,34 +555,7 @@ class SmartAgent {
       content = content.replace(/^[，,]/, '').trim();
       
       // 提取关键字
-      // 对于中文，取第一个词作为关键字
-      // 对于英文，取第一个有意义的词作为关键字（跳过冠词）
-      const firstChineseMatch = content.match(/^[\u4e00-\u9fa5]+/);
-      const firstEnglishMatch = content.match(/^[a-zA-Z]+/);
-      
-      if (firstChineseMatch) {
-        // 对于中文，取第一个词（最多2个字符）作为关键字
-        keyword = firstChineseMatch[0].substring(0, 2);
-      } else if (firstEnglishMatch) {
-        // 对于英文，跳过常见冠词
-        const commonArticles = ['the', 'a', 'an'];
-        let firstWord = firstEnglishMatch[0].toLowerCase();
-        
-        if (commonArticles.includes(firstWord)) {
-          // 如果是冠词，取第二个词
-          const secondWordMatch = content.match(/^[a-zA-Z]+\s+([a-zA-Z]+)/);
-          if (secondWordMatch) {
-            keyword = secondWordMatch[1];
-          } else {
-            keyword = firstWord;
-          }
-        } else {
-          keyword = firstWord;
-        }
-      } else {
-        // 如果都不是，取整个内容的前两个字符作为关键字
-        keyword = content.substring(0, 2);
-      }
+      keyword = extractLearningKeyword(content);
       
       answer = content;
     }
@@ -786,6 +596,29 @@ class SmartAgent {
     return null;
   }
 
+  // 优化缓存管理：检查缓存大小并清理
+  manageCache() {
+    if (this.cache.size >= this.cacheSizeLimit) {
+      // 找出访问次数最少的缓存项
+      let leastAccessedKey = null;
+      let leastAccessCount = Infinity;
+      
+      for (const [key, count] of this.cacheAccessCount.entries()) {
+        if (count < leastAccessCount) {
+          leastAccessCount = count;
+          leastAccessedKey = key;
+        }
+      }
+      
+      // 删除访问次数最少的缓存项
+      if (leastAccessedKey) {
+        this.cache.delete(leastAccessedKey);
+        this.cacheAccessCount.delete(leastAccessedKey);
+        this.log('debug', `缓存清理: 删除访问次数最少的项: ${leastAccessedKey}`);
+      }
+    }
+  }
+
   generateResponse(prompt) {
     return new Promise((resolve, reject) => {
       try {
@@ -793,11 +626,17 @@ class SmartAgent {
         if (this.cache.has(cacheKey)) {
           const cachedData = this.cache.get(cacheKey);
           if (Date.now() - cachedData.timestamp < this.cacheExpiry) {
+            // 更新缓存访问次数
+            const currentCount = this.cacheAccessCount.get(cacheKey) || 0;
+            this.cacheAccessCount.set(cacheKey, currentCount + 1);
             this.log('info', `从缓存获取响应: ${cacheKey}`);
             resolve(cachedData.response);
             return;
           } else {
+            // 删除过期缓存
             this.cache.delete(cacheKey);
+            this.cacheAccessCount.delete(cacheKey);
+            this.log('debug', `缓存过期: ${cacheKey}`);
           }
         }
         
@@ -815,22 +654,37 @@ class SmartAgent {
             mockResponse = knowledgeResult.response;
             skipCache = knowledgeResult.skipCache;
           } else {
-            const calcResult = this.handleCalculation(cleanPrompt);
+            const calcResult = handleCalculation(cleanPrompt);
             if (calcResult) {
               mockResponse = calcResult;
             } else {
-              const unitResult = this.handleUnitConversion(cleanPrompt, prompt);
+              const unitResult = handleUnitConversion(cleanPrompt, prompt);
               if (unitResult) {
                 mockResponse = unitResult;
               } else {
-                if (cleanPrompt.length < 15 || 
-                    cleanPrompt.includes('嗯') || 
-                    cleanPrompt.includes('哦') || 
-                    cleanPrompt.includes('啊') ||
-                    cleanPrompt.includes('哈')) {
-                  mockResponse = this.generateChatResponse(prompt, cleanPrompt);
+                const weatherResult = handleWeatherQuery(cleanPrompt);
+                if (weatherResult) {
+                  mockResponse = weatherResult;
                 } else {
-                  mockResponse = this.getFallbackResponse();
+                  const newsResult = handleNewsQuery(cleanPrompt);
+                  if (newsResult) {
+                    mockResponse = newsResult;
+                  } else {
+                    const dateResult = handleDateCalculation(cleanPrompt);
+                    if (dateResult) {
+                      mockResponse = dateResult;
+                    } else {
+                      if (cleanPrompt.length < 15 || 
+                          cleanPrompt.includes('嗯') || 
+                          cleanPrompt.includes('哦') || 
+                          cleanPrompt.includes('啊') ||
+                          cleanPrompt.includes('哈')) {
+                        mockResponse = generateChatResponse(prompt, cleanPrompt, this.userName);
+                      } else {
+                        mockResponse = this.getFallbackResponse();
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -839,10 +693,16 @@ class SmartAgent {
           this.log('debug', '模拟响应:', mockResponse);
           
           if (!skipCache) {
+            // 管理缓存大小
+            this.manageCache();
+            
+            // 设置缓存，初始化访问次数
             this.cache.set(cacheKey, {
               response: mockResponse,
               timestamp: Date.now()
             });
+            this.cacheAccessCount.set(cacheKey, 1);
+            this.log('debug', `缓存设置: ${cacheKey}`);
           } else {
             this.log('debug', '跳过缓存');
           }

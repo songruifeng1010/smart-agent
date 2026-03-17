@@ -43,6 +43,10 @@ node start-server.js
    - Build Command: (留空)
    - Start Command: `npm start`
 6. 点击 "Create Web Service"
+7. 配置环境变量（在Environment标签页）：
+   - `API_KEY`: 您的大模型API密钥
+   - `MODEL`: 模型名称（如gpt-3.5-turbo, claude-3-sonnet-20240229, gemini-1.5-flash-lite, deepseek-chat等）
+   - `PROVIDER`: 提供商名称（openai, anthropic, google, deepseek）
 
 ### 方案二：使用Railway
 

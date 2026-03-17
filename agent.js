@@ -213,6 +213,35 @@ class SmartAgent {
   }
 
   /**
+   * 识别用户意图
+   * @param {string} message - 用户消息
+   * @returns {string} 意图类型
+   */
+  identifyUserIntent(message) {
+    const cleanMessage = message.toLowerCase().trim();
+    
+    if (cleanMessage.includes('记住') || cleanMessage.includes('学习') || cleanMessage.includes('添加知识')) {
+      return 'learning';
+    } else if (cleanMessage.includes('切换到') && (cleanMessage.includes('模式') || cleanMessage.includes('mode'))) {
+      return 'mode_switch';
+    } else if (cleanMessage.includes('你好') || cleanMessage.includes('嗨') || cleanMessage.includes('哈喽')) {
+      return 'greeting';
+    } else if (cleanMessage.includes('再见') || cleanMessage.includes('拜拜') || cleanMessage.includes('晚安')) {
+      return 'farewell';
+    } else if (cleanMessage.includes('计算') || cleanMessage.includes('+') || cleanMessage.includes('-') || cleanMessage.includes('*') || cleanMessage.includes('/') || cleanMessage.includes('=')) {
+      return 'calculation';
+    } else if (cleanMessage.includes('天气') || cleanMessage.includes('温度')) {
+      return 'weather';
+    } else if (cleanMessage.includes('时间') || cleanMessage.includes('日期')) {
+      return 'datetime';
+    } else if (cleanMessage.includes('笑话') || cleanMessage.includes('搞笑') || cleanMessage.includes('幽默')) {
+      return 'joke';
+    } else {
+      return 'general';
+    }
+  }
+
+  /**
    * 处理消息
    * @param {string} message - 用户消息
    * @returns {Promise<string>} 响应内容
@@ -225,6 +254,32 @@ class SmartAgent {
       if (!message || typeof message !== 'string' || message.trim() === '') {
         this.log('error', '无效的消息: 消息为空或不是字符串');
         return '抱歉，我无法处理空的请求。';
+      }
+      
+      // 识别用户意图
+      const intent = this.identifyUserIntent(message);
+      this.log('debug', `用户意图: ${intent}`);
+      
+      // 处理学习意图
+      if (intent === 'learning' && this.learningEnabled) {
+        const learnResult = this.learnFromUser(message);
+        if (learnResult) {
+          this.log('info', `学习成功: ${message}`);
+          return learnResult;
+        }
+      }
+      
+      // 处理模式切换意图
+      if (intent === 'mode_switch') {
+        if (message.includes('友好')) {
+          return this.setChatMode('friendly');
+        } else if (message.includes('专业')) {
+          return this.setChatMode('professional');
+        } else if (message.includes('casual')) {
+          return this.setChatMode('casual');
+        } else if (message.includes('默认')) {
+          return this.setChatMode('default');
+        }
       }
       
       const response = await this.generateResponse(message);

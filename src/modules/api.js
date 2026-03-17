@@ -498,6 +498,30 @@ class APIManager {
   }
 
   /**
+   * 带重试的API调用
+   * @param {function} apiCall - API调用函数
+   * @param {number} maxRetries - 最大重试次数
+   * @param {number} retryDelay - 重试延迟（毫秒）
+   * @returns {Promise<string>} API响应
+   */
+  async callWithRetry(apiCall, maxRetries = 2, retryDelay = 1000) {
+    let retries = 0;
+    while (retries <= maxRetries) {
+      try {
+        return await apiCall();
+      } catch (error) {
+        retries++;
+        if (retries > maxRetries) {
+          this.log('error', 'API调用失败，已达到最大重试次数:', error.message);
+          throw error;
+        }
+        this.log('info', `API调用失败，正在重试 (${retries}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
+  }
+
+  /**
    * 调用API
    * @param {string} prompt - 用户输入
    * @param {string} cacheKey - 缓存键
@@ -508,14 +532,14 @@ class APIManager {
   async callAPI(prompt, cacheKey, cache, agentName) {
     switch (this.provider) {
       case 'anthropic':
-        return this.callAnthropicAPI(prompt, cacheKey, cache, agentName);
+        return this.callWithRetry(() => this.callAnthropicAPI(prompt, cacheKey, cache, agentName));
       case 'google':
-        return this.callGoogleAPI(prompt, cacheKey, cache, agentName);
+        return this.callWithRetry(() => this.callGoogleAPI(prompt, cacheKey, cache, agentName));
       case 'deepseek':
-        return this.callDeepSeekAPI(prompt, cacheKey, cache, agentName);
+        return this.callWithRetry(() => this.callDeepSeekAPI(prompt, cacheKey, cache, agentName));
       case 'openai':
       default:
-        return this.callOpenAIAPI(prompt, cacheKey, cache, agentName);
+        return this.callWithRetry(() => this.callOpenAIAPI(prompt, cacheKey, cache, agentName));
     }
   }
 

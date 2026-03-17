@@ -43,6 +43,24 @@ class CacheManager {
    * 管理缓存大小
    */
   manageCache() {
+    // 先清理过期缓存
+    const expiredKeys = [];
+    for (const key of this.cache.keys()) {
+      const cachedData = this.cache.get(key);
+      if (cachedData && Date.now() - cachedData.timestamp >= this.cacheExpiry) {
+        expiredKeys.push(key);
+      }
+    }
+    
+    for (const key of expiredKeys) {
+      this.cache.delete(key);
+      if (this.cacheAccessCount) {
+        this.cacheAccessCount.delete(key);
+      }
+      console.log(`缓存清理: 删除过期项: ${key}`);
+    }
+    
+    // 如果缓存仍然超过限制，删除访问次数最少的项
     if (this.cache.size >= this.cacheSizeLimit) {
       // 找出访问次数最少的缓存项
       let leastAccessedKey = null;

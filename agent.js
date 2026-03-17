@@ -40,6 +40,9 @@ class SmartAgent {
         suffix: ' 咋样？'
       }
     };
+    
+    // 自学习功能
+    this.learningEnabled = true;
   }
   
   log(level, ...args) {
@@ -247,7 +250,29 @@ class SmartAgent {
       }
     }
     
-    const knowledge = {
+    // 检测自学习指令
+    if (this.learningEnabled && (cleanPrompt.includes('记住') || cleanPrompt.includes('学习') || cleanPrompt.includes('添加知识') || cleanPrompt.includes('应该知道'))) {
+      const learnResult = this.learnFromUser(cleanPrompt);
+      if (learnResult) {
+        return { response: learnResult, skipCache: false };
+      }
+    }
+    
+    // 首先检查动态学习的知识库
+    if (this.knowledge) {
+      for (const [cat, data] of Object.entries(this.knowledge)) {
+        // 确保data和data.keywords存在
+        if (data && data.keywords) {
+          if (data.keywords.some(kw => cleanPrompt.includes(kw.toLowerCase()))) {
+            const response = this.getRandomResponse(data.responses);
+            return { response, skipCache: false };
+          }
+        }
+      }
+    }
+    
+    // 基础知识库
+    const baseKnowledge = {
       greetings: {
         keywords: ['你好', '您好', 'hi', 'hello', '早上好', '下午好', '晚上好', '嗨'],
         responses: [
@@ -621,7 +646,7 @@ class SmartAgent {
       }
     };
 
-    for (const [cat, data] of Object.entries(knowledge)) {
+    for (const [cat, data] of Object.entries(baseKnowledge)) {
       if (data.keywords.some(kw => cleanPrompt.includes(kw.toLowerCase()))) {
         let response;
         if (typeof data.responses[0] === 'function') {
@@ -673,6 +698,92 @@ class SmartAgent {
   applyChatMode(response) {
     const mode = this.chatModes[this.chatMode];
     return mode.prefix + response + mode.suffix;
+  }
+  
+  learnFromUser(prompt) {
+    // 解析用户输入，提取知识点和回答
+    // 格式示例: "记住，苹果是红色的"
+    // 格式示例: "学习，地球是圆的"
+    
+    const cleanPrompt = prompt.toLowerCase();
+    let keyword = '';
+    let answer = '';
+    
+    // 提取关键字和回答
+    if (cleanPrompt.includes('记住') || cleanPrompt.includes('学习') || cleanPrompt.includes('添加知识') || cleanPrompt.includes('应该知道')) {
+      // 移除学习指令词
+      let content = prompt.replace(/记住|学习|添加知识|应该知道/gi, '').trim();
+      
+      // 移除开头的标点符号
+      content = content.replace(/^[，,]/, '').trim();
+      
+      // 提取关键字
+      // 对于中文，取第一个词作为关键字
+      // 对于英文，取第一个有意义的词作为关键字（跳过冠词）
+      const firstChineseMatch = content.match(/^[\u4e00-\u9fa5]+/);
+      const firstEnglishMatch = content.match(/^[a-zA-Z]+/);
+      
+      if (firstChineseMatch) {
+        // 对于中文，取第一个词（最多2个字符）作为关键字
+        keyword = firstChineseMatch[0].substring(0, 2);
+      } else if (firstEnglishMatch) {
+        // 对于英文，跳过常见冠词
+        const commonArticles = ['the', 'a', 'an'];
+        let firstWord = firstEnglishMatch[0].toLowerCase();
+        
+        if (commonArticles.includes(firstWord)) {
+          // 如果是冠词，取第二个词
+          const secondWordMatch = content.match(/^[a-zA-Z]+\s+([a-zA-Z]+)/);
+          if (secondWordMatch) {
+            keyword = secondWordMatch[1];
+          } else {
+            keyword = firstWord;
+          }
+        } else {
+          keyword = firstWord;
+        }
+      } else {
+        // 如果都不是，取整个内容的前两个字符作为关键字
+        keyword = content.substring(0, 2);
+      }
+      
+      answer = content;
+    }
+    
+    if (keyword && answer) {
+      // 检查知识库中是否已有该类别
+      const categoryKey = keyword.toLowerCase();
+      
+      // 动态添加到知识库
+      if (!this.knowledge) {
+        this.knowledge = {};
+      }
+      
+      // 确保keywords是数组
+      if (!this.knowledge[categoryKey]) {
+        this.knowledge[categoryKey] = {
+          keywords: [keyword],
+          responses: [answer]
+        };
+      } else {
+        // 如果已有该类别，添加新的回答
+        if (!this.knowledge[categoryKey].responses.includes(answer)) {
+          this.knowledge[categoryKey].responses.push(answer);
+        }
+      }
+      
+      // 清除相关缓存，确保下次查询时使用新学习的知识
+      for (const cacheKey of this.cache.keys()) {
+        if (cacheKey.includes(keyword.toLowerCase())) {
+          this.cache.delete(cacheKey);
+        }
+      }
+      
+      this.log('info', `学习成功: ${keyword} -> ${answer}`);
+      return `好的，我已经记住了：${answer}`;
+    }
+    
+    return null;
   }
 
   generateResponse(prompt) {

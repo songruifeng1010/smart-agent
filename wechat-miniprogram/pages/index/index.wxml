@@ -1,0 +1,36 @@
+<view class="container">
+  <view class="chat-container">
+    <view class="chat-messages" id="chat-messages" scroll-y="true">
+      <view class="message bot-message" wx:for="{{messages}}" wx:key="{{index}}">
+        <view class="message-content" wx:if="{{item.type === 'bot'}}">{{item.content}}</view>
+        <view class="message-content user-message-content" wx:else>{{item.content}}</view>
+        <view class="message-time">{{item.time}}</view>
+      </view>
+      <view class="typing-indicator" wx:if="{{isTyping}}">
+        <view class="typing-dot"></view>
+        <view class="typing-dot"></view>
+        <view class="typing-dot"></view>
+      </view>
+    </view>
+    
+    <view class="quick-replies" wx:if="{{showQuickReplies}}">
+      <button class="quick-reply" wx:for="{{quickReplies}}" wx:key="{{index}}" bindtap="handleQuickReply" data-text="{{item}}">{{item}}</button>
+    </view>
+    
+    <view class="chat-input">
+      <input 
+        type="text" 
+        id="message-input" 
+        placeholder="请输入您的问题..." 
+        bindinput="handleInput" 
+        value="{{inputValue}}"
+      />
+      <button 
+        id="send-button" 
+        bindtap="sendMessage"
+        disabled="{{!inputValue}}">
+        发送
+      </button>
+    </view>
+  </view>
+</view>

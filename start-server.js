@@ -105,12 +105,13 @@ function handleRequest(req, res) {
 const server = http.createServer(handleRequest);
 
 // 启动服务器
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 3003;
 server.listen(PORT, () => {
   console.log('='.repeat(60));
   console.log(`  服务器运行在 http://localhost:${PORT}`);
   console.log(`  API端点: http://localhost:${PORT}/api/chat`);
   console.log(`  前端页面: http://localhost:${PORT}`);
+  console.log(`  健康检查: http://localhost:${PORT}/health`);
   console.log('='.repeat(60));
   console.log('\n按 Ctrl+C 停止服务器\n');
 });
@@ -119,6 +120,55 @@ server.listen(PORT, () => {
 server.on('error', (error) => {
   console.error('服务器错误:', error);
 });
+
+// 健康检查端点
+function addHealthCheck(app) {
+  // 处理健康检查请求
+  const originalHandleRequest = app._events.request;
+  app._events.request = (req, res) => {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    if (url.pathname === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+      }));
+      return;
+    }
+    originalHandleRequest(req, res);
+  };
+}
+
+// 定期自我唤醒（防止Render休眠）
+function startKeepAlive() {
+  const interval = 5 * 60 * 1000; // 5分钟
+  setInterval(() => {
+    try {
+      const options = {
+        hostname: 'localhost',
+        port: process.env.PORT || 3002,
+        path: '/health',
+        method: 'GET'
+      };
+      
+      const req = http.request(options, (res) => {
+        if (res.statusCode === 200) {
+          console.log('✓ 自我唤醒成功');
+        }
+      });
+      
+      req.on('error', (e) => {
+        console.log('自我唤醒失败:', e.message);
+      });
+      
+      req.end();
+    } catch (error) {
+      console.log('自我唤醒出错:', error.message);
+    }
+  }, interval);
+  console.log('自我唤醒机制已启动，每5分钟唤醒一次');
+}
 
 // 防止进程退出
 process.on('SIGINT', () => {
@@ -136,3 +186,9 @@ process.on('SIGTERM', () => {
     process.exit(0);
   });
 });
+
+// 添加健康检查
+addHealthCheck(server);
+
+// 启动自我唤醒
+startKeepAlive();

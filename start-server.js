@@ -230,6 +230,8 @@ server.listen(PORT, () => {
   console.log(`API端点: http://localhost:${PORT}/api/chat`);
   console.log(`前端页面: http://localhost:${PORT}`);
   console.log(`健康检查: http://localhost:${PORT}/health`);
+  console.log(`环境变量: PORT=${PORT}, NODE_ENV=${process.env.NODE_ENV}, MODEL=${process.env.MODEL}, PROVIDER=${process.env.PROVIDER}`);
+  console.log(`服务器已成功启动，等待请求...`);
 });
 
 // 添加错误处理

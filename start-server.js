@@ -29,6 +29,17 @@ function handleRequest(req, res) {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathname = url.pathname;
     
+    // 处理健康检查请求
+    if (pathname === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+      }));
+      return;
+    }
+    
     // 处理API请求
     if (pathname === '/api/chat') {
       if (req.method === 'POST') {
@@ -161,22 +172,9 @@ function handleRequest(req, res) {
 const server = http.createServer(handleRequest);
 
 // 健康检查端点
-function addHealthCheck(app) {
-  // 处理健康检查请求
-  const originalHandleRequest = app._events.request;
-  app._events.request = (req, res) => {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    if (url.pathname === '/health') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        status: 'ok', 
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime()
-      }));
-      return;
-    }
-    originalHandleRequest(req, res);
-  };
+function addHealthCheck(server) {
+  // 健康检查已在handleRequest函数中实现
+  console.log('健康检查端点已配置');
 }
 
 // 定期自我唤醒（防止Render休眠）

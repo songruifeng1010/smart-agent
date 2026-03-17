@@ -12,7 +12,7 @@ class SmartAgent {
     this.apiKey = config.apiKey || 'your_openai_api_key_here';
     this.name = config.name || 'SmartAgent';
     this.version = config.version || '2.0.0'; // 升级版本号
-    this.logLevel = config.logLevel || 'info';
+    this.logLevel = config.logLevel || 'debug'; // 修改为debug级别
     this.model = config.model || 'gpt-3.5-turbo';
     this.provider = config.provider || 'openai';
     
@@ -301,34 +301,31 @@ class SmartAgent {
     }
     
     const cleanMessage = message.toLowerCase().trim();
+    console.log(`分析情感: "${cleanMessage}"`);
     
+    // 消极情感关键词（优先匹配）
+    const negativeKeywords = ['伤心', '难过', '生气', '讨厌', '恨', '坏', '差', '糟糕', '失望', '遗憾', '不好', '不行', '失败', '心情不太好', '心情不好', '不开心', '郁闷', '烦恼', '焦虑', '沮丧', '痛苦'];
     // 积极情感关键词
-    const positiveKeywords = ['高兴', '开心', '快乐', '喜欢', '爱', '好', '棒', '优秀', '感谢', '谢谢', '不错', '很好', '完美'];
-    // 消极情感关键词
-    const negativeKeywords = ['伤心', '难过', '生气', '讨厌', '恨', '坏', '差', '糟糕', '失望', '遗憾', '不好', '不行', '失败'];
+    const positiveKeywords = ['高兴', '开心', '快乐', '喜欢', '爱', '好', '棒', '优秀', '感谢', '谢谢', '不错', '很好', '完美', '愉快', '兴奋', '激动', '满意', '满足'];
     
-    let positiveScore = 0;
-    let negativeScore = 0;
-    
-    for (const keyword of positiveKeywords) {
-      if (cleanMessage.includes(keyword)) {
-        positiveScore++;
-      }
-    }
-    
+    // 先检查是否包含消极关键词
     for (const keyword of negativeKeywords) {
       if (cleanMessage.includes(keyword)) {
-        negativeScore++;
+        console.log(`匹配到消极关键词: ${keyword}`);
+        return 'negative';
       }
     }
     
-    if (positiveScore > negativeScore) {
-      return 'positive';
-    } else if (negativeScore > positiveScore) {
-      return 'negative';
-    } else {
-      return 'neutral';
+    // 再检查是否包含积极关键词
+    for (const keyword of positiveKeywords) {
+      if (cleanMessage.includes(keyword)) {
+        console.log(`匹配到积极关键词: ${keyword}`);
+        return 'positive';
+      }
     }
+    
+    // 既不包含积极关键词也不包含消极关键词
+    return 'neutral';
   }
 
   /**
@@ -439,6 +436,7 @@ class SmartAgent {
       // 分析用户情感
       const sentiment = this.analyzeSentiment(message);
       this.log('debug', `用户情感: ${sentiment}`);
+      console.log(`情感分析结果: ${sentiment}`);
       
       // 跟踪话题
       const topic = this.trackTopic(message);
@@ -488,11 +486,18 @@ class SmartAgent {
       if (sentiment === 'negative') {
         const adjustedResponse = `我理解您现在可能感到不太开心。${response}`;
         this.log('info', `[${this.name}] 回复: ${adjustedResponse}`);
+        console.log(`情感分析结果: negative, 调整后的响应: ${adjustedResponse}`);
         return adjustedResponse;
+      } else if (sentiment === 'positive') {
+        const adjustedResponse = `看到您心情不错，我也很开心！${response}`;
+        this.log('info', `[${this.name}] 回复: ${adjustedResponse}`);
+        console.log(`情感分析结果: positive, 调整后的响应: ${adjustedResponse}`);
+        return adjustedResponse;
+      } else {
+        this.log('info', `[${this.name}] 回复: ${response}`);
+        console.log(`情感分析结果: neutral, 原始响应: ${response}`);
+        return response;
       }
-      
-      this.log('info', `[${this.name}] 回复: ${response}`);
-      return response;
     } catch (error) {
       this.log('error', '处理消息错误:', error.message);
       return '抱歉，我在处理您的请求时遇到了问题。';

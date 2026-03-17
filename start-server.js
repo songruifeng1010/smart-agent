@@ -11,7 +11,7 @@ try {
     apiKey: process.env.API_KEY || 'your_openai_api_key_here',
     name: 'SmartAgent',
     version: '2.0.0',
-    logLevel: 'info',
+    logLevel: 'debug', // 修改为debug级别
     model: process.env.MODEL || 'gpt-3.5-turbo',
     provider: process.env.PROVIDER || 'openai'
   });
@@ -63,8 +63,9 @@ function handleRequest(req, res) {
             }
             
             const response = await agent.processMessage(message);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
             res.end(JSON.stringify({ response }));
+            console.log(`处理请求成功: ${message} -> ${response}`);
           } catch (error) {
             console.error('API Error:', error);
             if (error instanceof SyntaxError) {

@@ -13,6 +13,8 @@
 - ✅ 笑话生成
 - ✅ 自然聊天响应
 - ✅ 缓存机制
+- ✅ 多模型支持（OpenAI、Anthropic、Google Gemini、DeepSeek）
+- ✅ 环境变量配置
 
 ## 本地运行
 

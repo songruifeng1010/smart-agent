@@ -5,8 +5,7 @@
   "main": "start-server.js",
   "scripts": {
     "start": "node start-server.js",
-    "dev": "node start-server.js",
-    "test": "node test-agent.js"
+    "dev": "node start-server.js"
   },
   "keywords": ["ai", "chat", "agent"],
   "author": "",

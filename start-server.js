@@ -10,7 +10,7 @@ try {
   agent = new SmartAgent({
     apiKey: process.env.API_KEY || 'your_openai_api_key_here',
     name: 'SmartAgent',
-    version: '1.0.0',
+    version: '2.0.0',
     logLevel: 'info',
     model: process.env.MODEL || 'gpt-3.5-turbo',
     provider: process.env.PROVIDER || 'openai'

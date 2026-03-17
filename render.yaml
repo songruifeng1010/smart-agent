@@ -21,6 +21,12 @@ envVars:
     value: "3002"
   - key: NODE_ENV
     value: "production"
+  - key: API_KEY
+    sync: false
+  - key: MODEL
+    value: "gpt-3.5-turbo"
+  - key: PROVIDER
+    value: "openai"
 
 # 健康检查
 healthCheckPath: "/health"

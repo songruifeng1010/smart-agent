@@ -8,12 +8,15 @@ console.log('正在初始化SmartAgent...');
 let agent;
 try {
   agent = new SmartAgent({
-    apiKey: 'your_openai_api_key_here',
+    apiKey: process.env.API_KEY || 'your_openai_api_key_here',
     name: 'SmartAgent',
     version: '1.0.0',
-    logLevel: 'info'
+    logLevel: 'info',
+    model: process.env.MODEL || 'gpt-3.5-turbo',
+    provider: process.env.PROVIDER || 'openai'
   });
   console.log('SmartAgent初始化成功');
+  console.log('当前配置:', agent.getConfig());
 } catch (error) {
   console.error('SmartAgent初始化失败:', error);
   process.exit(1);

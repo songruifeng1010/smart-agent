@@ -13,6 +13,8 @@ class SmartAgent {
     this.name = config.name || 'SmartAgent';
     this.version = config.version || '1.0.0';
     this.logLevel = config.logLevel || 'info';
+    this.model = config.model || 'gpt-3.5-turbo';
+    this.provider = config.provider || 'openai';
     
     // 初始化模块
     this.knowledgeManager = new KnowledgeManager();
@@ -22,7 +24,9 @@ class SmartAgent {
     });
     this.apiManager = new APIManager({
       apiKey: this.apiKey,
-      logLevel: this.logLevel
+      logLevel: this.logLevel,
+      model: this.model,
+      provider: this.provider
     });
     this.responseManager = new ResponseManager({
       logLevel: this.logLevel
@@ -172,8 +176,8 @@ class SmartAgent {
             this.log('debug', '跳过缓存');
           }
         } else {
-          // 调用OpenAI API
-          response = await this.apiManager.callOpenAIAPI(
+          // 调用API
+          response = await this.apiManager.callAPI(
             prompt, 
             cacheKey, 
             this.cacheManager, 
@@ -306,6 +310,56 @@ class SmartAgent {
    */
   getKnowledge() {
     return this.knowledgeManager.getKnowledge();
+  }
+
+  /**
+   * 设置模型
+   * @param {string} model - 模型名称
+   */
+  setModel(model) {
+    this.model = model;
+    if (this.apiManager) {
+      this.apiManager.setModel(model);
+    }
+  }
+
+  /**
+   * 设置提供商
+   * @param {string} provider - 提供商名称
+   * @returns {boolean} 是否设置成功
+   */
+  setProvider(provider) {
+    this.provider = provider;
+    if (this.apiManager) {
+      return this.apiManager.setProvider(provider);
+    }
+    return false;
+  }
+
+  /**
+   * 获取支持的提供商列表
+   * @returns {array} 支持的提供商列表
+   */
+  getSupportedProviders() {
+    if (this.apiManager) {
+      return this.apiManager.getSupportedProviders();
+    }
+    return [];
+  }
+
+  /**
+   * 获取当前配置
+   * @returns {object} 当前配置
+   */
+  getConfig() {
+    return {
+      apiKey: this.apiKey,
+      name: this.name,
+      version: this.version,
+      logLevel: this.logLevel,
+      model: this.model,
+      provider: this.provider
+    };
   }
 }
 

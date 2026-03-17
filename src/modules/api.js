@@ -508,15 +508,20 @@ class APIManager {
     let retries = 0;
     while (retries <= maxRetries) {
       try {
+        this.log('info', `API调用尝试 ${retries + 1}/${maxRetries + 1}`);
         return await apiCall();
       } catch (error) {
         retries++;
         if (retries > maxRetries) {
           this.log('error', 'API调用失败，已达到最大重试次数:', error.message);
-          throw error;
+          // 返回友好的错误信息
+          throw new Error(`API调用失败: ${error.message}`);
         }
         this.log('info', `API调用失败，正在重试 (${retries}/${maxRetries})...`);
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        // 指数退避策略
+        const backoffDelay = retryDelay * Math.pow(2, retries - 1);
+        this.log('debug', `重试延迟: ${backoffDelay}ms`);
+        await new Promise(resolve => setTimeout(resolve, backoffDelay));
       }
     }
   }
@@ -530,16 +535,24 @@ class APIManager {
    * @returns {Promise<string>} API响应
    */
   async callAPI(prompt, cacheKey, cache, agentName) {
-    switch (this.provider) {
-      case 'anthropic':
-        return this.callWithRetry(() => this.callAnthropicAPI(prompt, cacheKey, cache, agentName));
-      case 'google':
-        return this.callWithRetry(() => this.callGoogleAPI(prompt, cacheKey, cache, agentName));
-      case 'deepseek':
-        return this.callWithRetry(() => this.callDeepSeekAPI(prompt, cacheKey, cache, agentName));
-      case 'openai':
-      default:
-        return this.callWithRetry(() => this.callOpenAIAPI(prompt, cacheKey, cache, agentName));
+    try {
+      this.log('info', `开始API调用，提供商: ${this.provider}`);
+      
+      switch (this.provider) {
+        case 'anthropic':
+          return await this.callWithRetry(() => this.callAnthropicAPI(prompt, cacheKey, cache, agentName));
+        case 'google':
+          return await this.callWithRetry(() => this.callGoogleAPI(prompt, cacheKey, cache, agentName));
+        case 'deepseek':
+          return await this.callWithRetry(() => this.callDeepSeekAPI(prompt, cacheKey, cache, agentName));
+        case 'openai':
+        default:
+          return await this.callWithRetry(() => this.callOpenAIAPI(prompt, cacheKey, cache, agentName));
+      }
+    } catch (error) {
+      this.log('error', 'API调用错误:', error.message);
+      // 返回友好的错误信息
+      return `抱歉，我在调用${this.provider} API时遇到了问题：${error.message}。请稍后再试。`;
     }
   }
 

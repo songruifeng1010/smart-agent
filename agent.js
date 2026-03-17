@@ -11,7 +11,7 @@ class SmartAgent {
   constructor(config = {}) {
     this.apiKey = config.apiKey || 'your_openai_api_key_here';
     this.name = config.name || 'SmartAgent';
-    this.version = config.version || '1.0.0';
+    this.version = config.version || '2.0.0'; // 升级版本号
     this.logLevel = config.logLevel || 'info';
     this.model = config.model || 'gpt-3.5-turbo';
     this.provider = config.provider || 'openai';
@@ -34,11 +34,12 @@ class SmartAgent {
     
     // 对话历史
     this.conversationHistory = [];
-    this.maxHistoryLength = 10;
+    this.maxHistoryLength = 20; // 增加历史记录长度
     
     // 用户信息
     this.userName = null;
     this.lastTopic = null;
+    this.userPreferences = {}; // 用户偏好设置
     
     // 对话模式
     this.chatMode = 'default'; // default, friendly, professional, casual
@@ -59,7 +60,7 @@ class SmartAgent {
         suffix: ''
       },
       casual: {
-        name: ' casual模式',
+        name: 'casual模式',
         prefix: '嘿！',
         suffix: ' 咋样？'
       }
@@ -67,6 +68,14 @@ class SmartAgent {
     
     // 自学习功能
     this.learningEnabled = true;
+    
+    // 情感分析
+    this.sentimentAnalysisEnabled = true;
+    
+    // 话题跟踪
+    this.topicTrackingEnabled = true;
+    this.currentTopic = null;
+    this.topicHistory = [];
   }
   
   /**
@@ -176,9 +185,11 @@ class SmartAgent {
             this.log('debug', '跳过缓存');
           }
         } else {
+          // 构建包含对话历史的提示
+          const context = this.buildContext(prompt);
           // 调用API
           response = await this.apiManager.callAPI(
-            prompt, 
+            context, 
             cacheKey, 
             this.cacheManager, 
             this.name
@@ -213,6 +224,40 @@ class SmartAgent {
   }
 
   /**
+   * 构建包含对话历史的上下文
+   * @param {string} prompt - 当前用户输入
+   * @returns {string} 包含上下文的完整提示
+   */
+  buildContext(prompt) {
+    let context = `你是${this.name}，一个智能对话助手。你能够理解并回答用户的各种问题，提供准确且有用的信息，并且能够进行自然的对话。\n\n`;
+    
+    // 添加对话历史
+    if (this.conversationHistory.length > 0) {
+      context += '对话历史：\n';
+      for (const entry of this.conversationHistory) {
+        context += `用户: ${entry.user}\n`;
+        context += `助手: ${entry.bot}\n`;
+      }
+      context += '\n';
+    }
+    
+    // 添加当前话题信息
+    if (this.currentTopic) {
+      context += `当前话题: ${this.currentTopic}\n\n`;
+    }
+    
+    // 添加用户信息
+    if (this.userName) {
+      context += `用户名称: ${this.userName}\n\n`;
+    }
+    
+    // 添加当前用户输入
+    context += `用户当前输入: ${prompt}`;
+    
+    return context;
+  }
+
+  /**
    * 识别用户意图
    * @param {string} message - 用户消息
    * @returns {string} 意图类型
@@ -236,9 +281,140 @@ class SmartAgent {
       return 'datetime';
     } else if (cleanMessage.includes('笑话') || cleanMessage.includes('搞笑') || cleanMessage.includes('幽默')) {
       return 'joke';
+    } else if (cleanMessage.includes('帮助') || cleanMessage.includes('帮助我') || cleanMessage.includes('怎么')) {
+      return 'help';
+    } else if (cleanMessage.includes('设置') || cleanMessage.includes('偏好') || cleanMessage.includes('配置')) {
+      return 'settings';
     } else {
       return 'general';
     }
+  }
+
+  /**
+   * 分析用户情感
+   * @param {string} message - 用户消息
+   * @returns {string} 情感类型
+   */
+  analyzeSentiment(message) {
+    if (!this.sentimentAnalysisEnabled) {
+      return 'neutral';
+    }
+    
+    const cleanMessage = message.toLowerCase().trim();
+    
+    // 积极情感关键词
+    const positiveKeywords = ['高兴', '开心', '快乐', '喜欢', '爱', '好', '棒', '优秀', '感谢', '谢谢', '不错', '很好', '完美'];
+    // 消极情感关键词
+    const negativeKeywords = ['伤心', '难过', '生气', '讨厌', '恨', '坏', '差', '糟糕', '失望', '遗憾', '不好', '不行', '失败'];
+    
+    let positiveScore = 0;
+    let negativeScore = 0;
+    
+    for (const keyword of positiveKeywords) {
+      if (cleanMessage.includes(keyword)) {
+        positiveScore++;
+      }
+    }
+    
+    for (const keyword of negativeKeywords) {
+      if (cleanMessage.includes(keyword)) {
+        negativeScore++;
+      }
+    }
+    
+    if (positiveScore > negativeScore) {
+      return 'positive';
+    } else if (negativeScore > positiveScore) {
+      return 'negative';
+    } else {
+      return 'neutral';
+    }
+  }
+
+  /**
+   * 跟踪话题
+   * @param {string} message - 用户消息
+   * @returns {string} 当前话题
+   */
+  trackTopic(message) {
+    if (!this.topicTrackingEnabled) {
+      return null;
+    }
+    
+    const cleanMessage = message.toLowerCase().trim();
+    
+    // 话题关键词
+    const topics = {
+      '科技': ['科技', '技术', '互联网', 'AI', '人工智能', '计算机', '手机', '软件', '硬件'],
+      '娱乐': ['电影', '音乐', '游戏', '明星', '体育', '旅游', '美食', '购物'],
+      '学习': ['学习', '教育', '考试', '学校', '课程', '作业', '知识'],
+      '工作': ['工作', '职场', '职业', '面试', '公司', '加班', '薪资'],
+      '生活': ['生活', '家庭', '健康', '健身', '减肥', '睡眠', '心情']
+    };
+    
+    let currentTopic = null;
+    let maxScore = 0;
+    
+    for (const [topic, keywords] of Object.entries(topics)) {
+      let score = 0;
+      for (const keyword of keywords) {
+        if (cleanMessage.includes(keyword)) {
+          score++;
+        }
+      }
+      if (score > maxScore) {
+        maxScore = score;
+        currentTopic = topic;
+      }
+    }
+    
+    if (currentTopic) {
+      this.currentTopic = currentTopic;
+      if (!this.topicHistory.includes(currentTopic)) {
+        this.topicHistory.push(currentTopic);
+        if (this.topicHistory.length > 5) {
+          this.topicHistory.shift();
+        }
+      }
+    }
+    
+    return currentTopic;
+  }
+
+  /**
+   * 处理用户偏好设置
+   * @param {string} message - 用户消息
+   * @returns {string} 设置结果
+   */
+  handleUserPreferences(message) {
+    const cleanMessage = message.toLowerCase().trim();
+    
+    if (cleanMessage.includes('设置') && cleanMessage.includes('模式')) {
+      if (cleanMessage.includes('友好')) {
+        this.chatMode = 'friendly';
+        return '已将默认对话模式设置为友好模式！';
+      } else if (cleanMessage.includes('专业')) {
+        this.chatMode = 'professional';
+        return '已将默认对话模式设置为专业模式！';
+      } else if (cleanMessage.includes('casual')) {
+        this.chatMode = 'casual';
+        return '已将默认对话模式设置为casual模式！';
+      } else if (cleanMessage.includes('默认')) {
+        this.chatMode = 'default';
+        return '已将默认对话模式设置为默认模式！';
+      }
+    }
+    
+    if (cleanMessage.includes('设置') && cleanMessage.includes('名字') && cleanMessage.includes('叫')) {
+      const nameMatch = message.match(/叫(.*?)(?:吧|了|。|！|\?)/);
+      if (nameMatch && nameMatch[1]) {
+        const name = nameMatch[1].trim();
+        this.name = name;
+        return `已将我的名字设置为${name}！`;
+      }
+    }
+    
+    return null;
   }
 
   /**
@@ -259,6 +435,16 @@ class SmartAgent {
       // 识别用户意图
       const intent = this.identifyUserIntent(message);
       this.log('debug', `用户意图: ${intent}`);
+      
+      // 分析用户情感
+      const sentiment = this.analyzeSentiment(message);
+      this.log('debug', `用户情感: ${sentiment}`);
+      
+      // 跟踪话题
+      const topic = this.trackTopic(message);
+      if (topic) {
+        this.log('debug', `当前话题: ${topic}`);
+      }
       
       // 处理学习意图
       if (intent === 'learning' && this.learningEnabled) {
@@ -282,7 +468,29 @@ class SmartAgent {
         }
       }
       
+      // 处理设置意图
+      if (intent === 'settings') {
+        const settingsResult = this.handleUserPreferences(message);
+        if (settingsResult) {
+          this.log('info', `设置成功: ${message}`);
+          return settingsResult;
+        }
+      }
+      
+      // 处理帮助意图
+      if (intent === 'help') {
+        return '我可以帮助您做以下事情：\n1. 回答各种问题\n2. 进行数学计算\n3. 单位转换\n4. 讲笑话\n5. 学习新知识\n6. 切换对话模式\n7. 设置偏好\n\n请问您需要什么帮助？';
+      }
+      
       const response = await this.generateResponse(message);
+      
+      // 根据情感调整响应
+      if (sentiment === 'negative') {
+        const adjustedResponse = `我理解您现在可能感到不太开心。${response}`;
+        this.log('info', `[${this.name}] 回复: ${adjustedResponse}`);
+        return adjustedResponse;
+      }
+      
       this.log('info', `[${this.name}] 回复: ${response}`);
       return response;
     } catch (error) {

@@ -24,9 +24,10 @@ class ResponseManager {
    * @param {string} prompt - 用户输入
    * @param {function} getKnowledgeResponse - 获取知识响应的函数
    * @param {string} userName - 用户名
+   * @param {array} conversationHistory - 对话历史
    * @returns {object} 模拟响应对象
    */
-  generateMockResponse(prompt, getKnowledgeResponse, userName) {
+  generateMockResponse(prompt, getKnowledgeResponse, userName, conversationHistory = []) {
     try {
       const cleanPrompt = prompt.toLowerCase().trim();
       let mockResponse = '';
@@ -62,9 +63,9 @@ class ResponseManager {
                       cleanPrompt.includes('哦') || 
                       cleanPrompt.includes('啊') ||
                       cleanPrompt.includes('哈')) {
-                    mockResponse = generateChatResponse(prompt, cleanPrompt, userName);
+                    mockResponse = generateChatResponse(prompt, cleanPrompt, userName, conversationHistory);
                   } else {
-                    mockResponse = getFallbackResponse();
+                    mockResponse = getFallbackResponse(conversationHistory);
                   }
                 }
               }

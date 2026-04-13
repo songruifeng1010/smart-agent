@@ -203,7 +203,8 @@ class SmartAgent {
             const { mockResponse, skipCache } = this.responseManager.generateMockResponse(
               prompt, 
               (cleanPrompt) => this.getKnowledgeResponse(cleanPrompt),
-              this.userName
+              this.userName,
+              this.conversationHistory
             );
             response = mockResponse;
             

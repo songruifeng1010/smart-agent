@@ -194,7 +194,7 @@ function handleUnitConversion(cleanPrompt, prompt) {
  * @param {string} userName - 用户名
  * @returns {string} 聊天响应
  */
-function generateChatResponse(prompt, cleanPrompt, userName) {
+function generateChatResponse(prompt, cleanPrompt, userName, conversationHistory = []) {
   const emotion = detectEmotion(prompt);
   const emotionResponse = respondToEmotion(emotion);
   
@@ -211,6 +211,89 @@ function generateChatResponse(prompt, cleanPrompt, userName) {
 
   if (userName && (cleanPrompt.includes('我是谁') || cleanPrompt.includes('我的名字'))) {
     return `你是${userName}呀！我当然记得你啦 😊`;
+  }
+
+  // 检查对话历史，生成连贯的回答
+  if (conversationHistory.length > 0) {
+    const lastEntry = conversationHistory[conversationHistory.length - 1];
+    const lastUserMessage = lastEntry.user.toLowerCase();
+    const lastBotResponse = lastEntry.bot.toLowerCase();
+
+    // 检查用户是否在回应机器人的问题
+    if (cleanPrompt.includes('是的') || cleanPrompt.includes('对的') || cleanPrompt.includes('嗯') || cleanPrompt.includes('是的')) {
+      const positiveResponses = [
+        '好的，我明白了。那接下来你想聊点什么呢？',
+        '明白啦！那我们接着聊点别的吧？',
+        '好的，我懂了。还有什么想告诉我的吗？',
+        '嗯，我理解了。那我们继续聊聊吧！'
+      ];
+      return getRandomResponse(positiveResponses);
+    }
+
+    // 检查用户是否在否定机器人的问题
+    if (cleanPrompt.includes('不是') || cleanPrompt.includes('不对') || cleanPrompt.includes('错了')) {
+      const negativeResponses = [
+        '哦，抱歉我理解错了。那你能再跟我解释一下吗？',
+        '抱歉，我可能理解错了。你能再详细说说吗？',
+        '哦，我明白了，是我理解错了。那正确的情况是怎样的呢？',
+        '抱歉，我之前理解错了。你能再跟我说说吗？'
+      ];
+      return getRandomResponse(negativeResponses);
+    }
+
+    // 检查用户是否在追问
+    if (cleanPrompt.includes('为什么') || cleanPrompt.includes('怎么') || cleanPrompt.includes('如何') || cleanPrompt.includes('怎样')) {
+      const questionResponses = [
+        '这个问题很有意思！让我想想...',
+        '好问题！我觉得可能是这样的...',
+        '嗯，关于这个问题，我是这么理解的...',
+        '这个问题挺复杂的，我来跟你说说我的看法...'
+      ];
+      return getRandomResponse(questionResponses);
+    }
+
+    // 检查用户是否在问天气
+    if (cleanPrompt.includes('天气') || cleanPrompt.includes('温度') || cleanPrompt.includes('下雨') || cleanPrompt.includes('晴天')) {
+      const weatherResponses = [
+        '天气的话，我觉得最近变化挺大的。你那里现在是什么天气呀？',
+        '关于天气，我不太清楚具体的情况。你那里今天天气怎么样？',
+        '天气这个话题挺有意思的。你喜欢什么样的天气呢？',
+        '说到天气，我最近也在关注。你那里今天温度大概多少度呀？'
+      ];
+      return getRandomResponse(weatherResponses);
+    }
+
+    // 检查用户是否在改变话题
+    if (conversationHistory.length > 1) {
+      const secondLastEntry = conversationHistory[conversationHistory.length - 2];
+      const secondLastUserMessage = secondLastEntry.user.toLowerCase();
+      const secondLastBotResponse = secondLastEntry.bot.toLowerCase();
+
+      // 如果用户的话题与之前的完全不同，可能是在改变话题
+      if (!cleanPrompt.includes(secondLastUserMessage) && !secondLastUserMessage.includes(cleanPrompt)) {
+        const changeTopicResponses = [
+          '哦，我们现在聊这个呀！挺有意思的。',
+          '好的，我们换个话题聊聊吧！',
+          '这个话题我也很感兴趣，我们来聊聊吧！',
+          '好的，我们来聊聊这个。'
+        ];
+        return getRandomResponse(changeTopicResponses);
+      }
+    }
+
+    // 检查用户是否在继续之前的话题
+    const previousTopics = conversationHistory.map(entry => entry.user.toLowerCase());
+    for (const previousTopic of previousTopics) {
+      if (cleanPrompt.includes(previousTopic) || previousTopic.includes(cleanPrompt)) {
+        const continueTopicResponses = [
+          '哦，我们又回到这个话题啦！',
+          '对，之前我们聊过这个。你现在有什么新的想法吗？',
+          '好的，我们继续聊聊这个话题。',
+          '我记得我们之前聊过这个。你现在想了解更多吗？'
+        ];
+        return getRandomResponse(continueTopicResponses);
+      }
+    }
   }
 
   const chatResponses = [
@@ -233,7 +316,25 @@ function generateChatResponse(prompt, cleanPrompt, userName) {
  * 生成 fallback 响应
  * @returns {string} fallback 响应
  */
-function getFallbackResponse() {
+function getFallbackResponse(conversationHistory = []) {
+  // 检查对话历史，生成连贯的回答
+  if (conversationHistory.length > 0) {
+    const lastEntry = conversationHistory[conversationHistory.length - 1];
+    const lastUserMessage = lastEntry.user.toLowerCase();
+    const lastBotResponse = lastEntry.bot.toLowerCase();
+
+    // 如果之前的回答也是fallback，生成一个不同的fallback
+    if (lastBotResponse.includes('不知道') || lastBotResponse.includes('不了解') || lastBotResponse.includes('回答不了')) {
+      const followUpFallbackResponses = [
+        '看来这个问题确实有点难。我们换个话题怎么样？',
+        '这个问题我确实不太清楚。你想聊点别的吗？',
+        '抱歉，我还是不太了解这个问题。我们聊点其他的吧？',
+        '这个问题对我来说有点复杂。你有其他想聊的吗？'
+      ];
+      return getRandomResponse(followUpFallbackResponses);
+    }
+  }
+
   const responses = [
     '嗯...这个问题我一时半会儿还真不知道怎么回答。要不我们聊聊别的？',
     '这个话题我不太熟悉，我们换个话题聊聊怎么样？',

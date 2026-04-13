@@ -1,6 +1,19 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+
+// 读取.env文件
+if (fs.existsSync('.env')) {
+  const envContent = fs.readFileSync('.env', 'utf8');
+  envContent.split('\n').forEach(line => {
+    const match = line.match(/^([^=]+)=(.+)$/);
+    if (match) {
+      const [, key, value] = match;
+      process.env[key.trim()] = value.trim();
+    }
+  });
+}
+
 const SmartAgent = require('./agent');
 
 // 创建智能体实例

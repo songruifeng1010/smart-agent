@@ -3,24 +3,40 @@ const CacheManager = require('./src/modules/cache');
 const APIManager = require('./src/modules/api');
 const ResponseManager = require('./src/modules/response');
 const { extractLearningKeyword } = require('./utils');
+const IntentManager = require('./src/modules/intent');
+const SentimentManager = require('./src/modules/sentiment');
+const TopicManager = require('./src/modules/topic');
 
 /**
  * 智能对话助手
  */
 class SmartAgent {
   constructor(config = {}) {
-    this.apiKey = config.apiKey || 'your_openai_api_key_here';
-    this.name = config.name || 'SmartAgent';
-    this.version = config.version || '2.0.0'; // 升级版本号
-    this.logLevel = config.logLevel || 'debug'; // 修改为debug级别
-    this.model = config.model || 'gpt-3.5-turbo';
-    this.provider = config.provider || 'openai';
+    this.apiKey = config.apiKey || process.env.API_KEY || 'your_openai_api_key_here';
+    this.name = config.name || process.env.AGENT_NAME || 'SmartAgent';
+    this.version = config.version || process.env.AGENT_VERSION || '3.0.0';
+    this.logLevel = config.logLevel || process.env.LOG_LEVEL || 'debug';
+    this.model = config.model || process.env.MODEL || 'gpt-3.5-turbo';
+    this.provider = config.provider || process.env.PROVIDER || 'openai';
+    this.language = config.language || process.env.LANGUAGE || 'zh-CN';
+    
+    // 支持的语言
+    this.supportedLanguages = {
+      'zh-CN': '简体中文',
+      'en-US': 'English',
+      'ja-JP': '日本語',
+      'ko-KR': '한국어',
+      'fr-FR': 'Français',
+      'de-DE': 'Deutsch',
+      'es-ES': 'Español',
+      'ru-RU': 'Русский'
+    };
     
     // 初始化模块
     this.knowledgeManager = new KnowledgeManager();
     this.cacheManager = new CacheManager({
-      cacheExpiry: 3600000, // 默认1小时
-      cacheSizeLimit: 1000 // 缓存大小限制
+      cacheExpiry: parseInt(process.env.CACHE_EXPIRY) || 3600000, // 默认1小时
+      cacheSizeLimit: parseInt(process.env.CACHE_SIZE_LIMIT) || 1000 // 缓存大小限制
     });
     this.apiManager = new APIManager({
       apiKey: this.apiKey,
@@ -31,6 +47,9 @@ class SmartAgent {
     this.responseManager = new ResponseManager({
       logLevel: this.logLevel
     });
+    this.intentManager = new IntentManager();
+    this.sentimentManager = new SentimentManager();
+    this.topicManager = new TopicManager();
     
     // 对话历史
     this.conversationHistory = [];
@@ -67,13 +86,13 @@ class SmartAgent {
     };
     
     // 自学习功能
-    this.learningEnabled = true;
+    this.learningEnabled = process.env.LEARNING_ENABLED !== 'false';
     
     // 情感分析
-    this.sentimentAnalysisEnabled = true;
+    this.sentimentAnalysisEnabled = process.env.SENTIMENT_ANALYSIS_ENABLED !== 'false';
     
     // 话题跟踪
-    this.topicTrackingEnabled = true;
+    this.topicTrackingEnabled = process.env.TOPIC_TRACKING_ENABLED !== 'false';
     this.currentTopic = null;
     this.topicHistory = [];
   }
@@ -85,7 +104,8 @@ class SmartAgent {
    */
   log(level, ...args) {
     if (['debug', 'info', 'error'].indexOf(level) >= ['debug', 'info', 'error'].indexOf(this.logLevel)) {
-      console.log(`[${level.toUpperCase()}]`, ...args);
+      const timestamp = new Date().toISOString();
+      console.log(`[${timestamp}] [${this.name}] [${level.toUpperCase()}]`, ...args);
     }
   }
 
@@ -143,28 +163,35 @@ class SmartAgent {
         }
         
         const cacheKey = prompt.trim().toLowerCase();
+        this.log('debug', `生成响应: 缓存键 - ${cacheKey}`);
         
         // 检查缓存
-        const cachedResponse = this.cacheManager.handleCache(cacheKey);
-        if (cachedResponse) {
-          try {
-            const finalResponse = this.responseManager.applyChatMode(
-              cachedResponse, 
-              this.chatModes, 
-              this.chatMode
-            );
-            this.responseManager.addToHistory(
-              this.conversationHistory, 
-              prompt, 
-              finalResponse, 
-              this.maxHistoryLength
-            );
-            resolve(finalResponse);
-            return;
-          } catch (cacheError) {
-            this.log('error', '处理缓存响应错误:', cacheError.message);
-            // 继续处理，不依赖缓存
+        try {
+          const cachedResponse = this.cacheManager.handleCache(cacheKey);
+          if (cachedResponse) {
+            this.log('info', '使用缓存响应');
+            try {
+              const finalResponse = this.responseManager.applyChatMode(
+                cachedResponse, 
+                this.chatModes, 
+                this.chatMode
+              );
+              this.responseManager.addToHistory(
+                this.conversationHistory, 
+                prompt, 
+                finalResponse, 
+                this.maxHistoryLength
+              );
+              resolve(finalResponse);
+              return;
+            } catch (cacheError) {
+              this.log('error', '处理缓存响应错误:', cacheError.message, cacheError.stack);
+              // 继续处理，不依赖缓存
+            }
           }
+        } catch (cacheError) {
+          this.log('error', '检查缓存错误:', cacheError.message, cacheError.stack);
+          // 继续处理，不依赖缓存
         }
         
         this.log('info', '正在处理请求...');
@@ -172,32 +199,52 @@ class SmartAgent {
         let response;
         if (!this.apiManager.isApiKeyValid()) {
           this.log('info', '使用模拟响应模式');
-          const { mockResponse, skipCache } = this.responseManager.generateMockResponse(
-            prompt, 
-            (cleanPrompt) => this.getKnowledgeResponse(cleanPrompt),
-            this.userName
-          );
-          response = mockResponse;
-          
-          if (!skipCache) {
-            this.cacheManager.setCache(cacheKey, response);
-          } else {
-            this.log('debug', '跳过缓存');
+          try {
+            const { mockResponse, skipCache } = this.responseManager.generateMockResponse(
+              prompt, 
+              (cleanPrompt) => this.getKnowledgeResponse(cleanPrompt),
+              this.userName
+            );
+            response = mockResponse;
+            
+            if (!skipCache) {
+              try {
+                this.cacheManager.setCache(cacheKey, response);
+                this.log('debug', '响应已缓存');
+              } catch (cacheError) {
+                this.log('error', '设置缓存错误:', cacheError.message);
+              }
+            } else {
+              this.log('debug', '跳过缓存');
+            }
+          } catch (mockError) {
+            this.log('error', '生成模拟响应错误:', mockError.message, mockError.stack);
+            response = '抱歉，我在生成响应时遇到了问题。';
           }
         } else {
           // 构建包含对话历史的提示
-          const context = this.buildContext(prompt);
-          // 调用API
-          response = await this.apiManager.callAPI(
-            context, 
-            cacheKey, 
-            this.cacheManager, 
-            this.name
-          );
+          try {
+            const context = this.buildContext(prompt);
+            // 调用API
+            response = await this.apiManager.callAPI(
+              context, 
+              cacheKey, 
+              this.cacheManager, 
+              this.name
+            );
+          } catch (apiError) {
+            this.log('error', 'API调用错误:', apiError.message, apiError.stack);
+            response = '抱歉，我在调用API时遇到了问题。';
+          }
         }
         
         // 处理响应
-        response = this.responseManager.processResponse(response);
+        try {
+          response = this.responseManager.processResponse(response);
+        } catch (processError) {
+          this.log('error', '处理响应错误:', processError.message, processError.stack);
+          // 继续使用原始响应
+        }
         
         try {
           const finalResponse = this.responseManager.applyChatMode(
@@ -211,13 +258,14 @@ class SmartAgent {
             finalResponse, 
             this.maxHistoryLength
           );
+          this.log('info', '响应生成成功');
           resolve(finalResponse);
         } catch (finalError) {
-          this.log('error', '处理最终响应错误:', finalError.message);
+          this.log('error', '处理最终响应错误:', finalError.message, finalError.stack);
           resolve(response); // 直接返回原始响应
         }
       } catch (error) {
-        this.log('error', '生成响应错误:', error.message);
+        this.log('error', '生成响应错误:', error.message, error.stack);
         resolve('抱歉，我在处理您的请求时遇到了问题。');
       }
     });
@@ -263,31 +311,7 @@ class SmartAgent {
    * @returns {string} 意图类型
    */
   identifyUserIntent(message) {
-    const cleanMessage = message.toLowerCase().trim();
-    
-    if (cleanMessage.includes('记住') || cleanMessage.includes('学习') || cleanMessage.includes('添加知识')) {
-      return 'learning';
-    } else if (cleanMessage.includes('切换到') && (cleanMessage.includes('模式') || cleanMessage.includes('mode'))) {
-      return 'mode_switch';
-    } else if (cleanMessage.includes('你好') || cleanMessage.includes('嗨') || cleanMessage.includes('哈喽')) {
-      return 'greeting';
-    } else if (cleanMessage.includes('再见') || cleanMessage.includes('拜拜') || cleanMessage.includes('晚安')) {
-      return 'farewell';
-    } else if (cleanMessage.includes('计算') || cleanMessage.includes('+') || cleanMessage.includes('-') || cleanMessage.includes('*') || cleanMessage.includes('/') || cleanMessage.includes('=')) {
-      return 'calculation';
-    } else if (cleanMessage.includes('天气') || cleanMessage.includes('温度')) {
-      return 'weather';
-    } else if (cleanMessage.includes('时间') || cleanMessage.includes('日期')) {
-      return 'datetime';
-    } else if (cleanMessage.includes('笑话') || cleanMessage.includes('搞笑') || cleanMessage.includes('幽默')) {
-      return 'joke';
-    } else if (cleanMessage.includes('帮助') || cleanMessage.includes('帮助我') || cleanMessage.includes('怎么')) {
-      return 'help';
-    } else if (cleanMessage.includes('设置') || cleanMessage.includes('偏好') || cleanMessage.includes('配置')) {
-      return 'settings';
-    } else {
-      return 'general';
-    }
+    return this.intentManager.identifyIntent(message);
   }
 
   /**
@@ -300,32 +324,9 @@ class SmartAgent {
       return 'neutral';
     }
     
-    const cleanMessage = message.toLowerCase().trim();
-    console.log(`分析情感: "${cleanMessage}"`);
-    
-    // 消极情感关键词（优先匹配）
-    const negativeKeywords = ['伤心', '难过', '生气', '讨厌', '恨', '坏', '差', '糟糕', '失望', '遗憾', '不好', '不行', '失败', '心情不太好', '心情不好', '不开心', '郁闷', '烦恼', '焦虑', '沮丧', '痛苦'];
-    // 积极情感关键词
-    const positiveKeywords = ['高兴', '开心', '快乐', '喜欢', '爱', '好', '棒', '优秀', '感谢', '谢谢', '不错', '很好', '完美', '愉快', '兴奋', '激动', '满意', '满足'];
-    
-    // 先检查是否包含消极关键词
-    for (const keyword of negativeKeywords) {
-      if (cleanMessage.includes(keyword)) {
-        console.log(`匹配到消极关键词: ${keyword}`);
-        return 'negative';
-      }
-    }
-    
-    // 再检查是否包含积极关键词
-    for (const keyword of positiveKeywords) {
-      if (cleanMessage.includes(keyword)) {
-        console.log(`匹配到积极关键词: ${keyword}`);
-        return 'positive';
-      }
-    }
-    
-    // 既不包含积极关键词也不包含消极关键词
-    return 'neutral';
+    const sentiment = this.sentimentManager.analyzeSentiment(message);
+    this.log('debug', `情感分析结果: ${sentiment}`);
+    return sentiment;
   }
 
   /**
@@ -338,41 +339,10 @@ class SmartAgent {
       return null;
     }
     
-    const cleanMessage = message.toLowerCase().trim();
-    
-    // 话题关键词
-    const topics = {
-      '科技': ['科技', '技术', '互联网', 'AI', '人工智能', '计算机', '手机', '软件', '硬件'],
-      '娱乐': ['电影', '音乐', '游戏', '明星', '体育', '旅游', '美食', '购物'],
-      '学习': ['学习', '教育', '考试', '学校', '课程', '作业', '知识'],
-      '工作': ['工作', '职场', '职业', '面试', '公司', '加班', '薪资'],
-      '生活': ['生活', '家庭', '健康', '健身', '减肥', '睡眠', '心情']
-    };
-    
-    let currentTopic = null;
-    let maxScore = 0;
-    
-    for (const [topic, keywords] of Object.entries(topics)) {
-      let score = 0;
-      for (const keyword of keywords) {
-        if (cleanMessage.includes(keyword)) {
-          score++;
-        }
-      }
-      if (score > maxScore) {
-        maxScore = score;
-        currentTopic = topic;
-      }
-    }
-    
+    const currentTopic = this.topicManager.trackTopic(message);
     if (currentTopic) {
       this.currentTopic = currentTopic;
-      if (!this.topicHistory.includes(currentTopic)) {
-        this.topicHistory.push(currentTopic);
-        if (this.topicHistory.length > 5) {
-          this.topicHistory.shift();
-        }
-      }
+      this.topicHistory = this.topicManager.getTopicHistory();
     }
     
     return currentTopic;
@@ -616,6 +586,37 @@ class SmartAgent {
   }
 
   /**
+   * 设置语言
+   * @param {string} language - 语言代码
+   * @returns {boolean} 是否设置成功
+   */
+  setLanguage(language) {
+    if (this.supportedLanguages[language]) {
+      this.language = language;
+      this.log('info', `语言已设置为: ${this.supportedLanguages[language]}`);
+      return true;
+    }
+    this.log('error', `不支持的语言: ${language}`);
+    return false;
+  }
+
+  /**
+   * 获取当前语言
+   * @returns {string} 当前语言代码
+   */
+  getLanguage() {
+    return this.language;
+  }
+
+  /**
+   * 获取支持的语言列表
+   * @returns {object} 支持的语言列表
+   */
+  getSupportedLanguages() {
+    return this.supportedLanguages;
+  }
+
+  /**
    * 获取当前配置
    * @returns {object} 当前配置
    */
@@ -626,7 +627,8 @@ class SmartAgent {
       version: this.version,
       logLevel: this.logLevel,
       model: this.model,
-      provider: this.provider
+      provider: this.provider,
+      language: this.language
     };
   }
 }

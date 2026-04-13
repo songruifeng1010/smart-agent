@@ -1,24 +1,27 @@
-const KnowledgeManager = require('./src/modules/knowledge');
-const CacheManager = require('./src/modules/cache');
-const APIManager = require('./src/modules/api');
-const ResponseManager = require('./src/modules/response');
-const { extractLearningKeyword } = require('./utils');
-const IntentManager = require('./src/modules/intent');
-const SentimentManager = require('./src/modules/sentiment');
-const TopicManager = require('./src/modules/topic');
+const KnowledgeManager = require('./src/services/knowledge');
+const CacheManager = require('./src/services/cache');
+const APIManager = require('./src/services/api');
+const ResponseManager = require('./src/services/response');
+const { extractLearningKeyword } = require('./src/utils');
+const IntentManager = require('./src/services/intent');
+const SentimentManager = require('./src/services/sentiment');
+const TopicManager = require('./src/services/topic');
+const sessionManager = require('./src/services/session');
+const securityManager = require('./src/services/security');
 
 /**
  * 智能对话助手
  */
 class SmartAgent {
   constructor(config = {}) {
-    this.apiKey = config.apiKey || process.env.API_KEY || 'your_openai_api_key_here';
-    this.name = config.name || process.env.AGENT_NAME || 'SmartAgent';
-    this.version = config.version || process.env.AGENT_VERSION || '3.0.0';
-    this.logLevel = config.logLevel || process.env.LOG_LEVEL || 'debug';
-    this.model = config.model || process.env.MODEL || 'gpt-3.5-turbo';
-    this.provider = config.provider || process.env.PROVIDER || 'openai';
-    this.language = config.language || process.env.LANGUAGE || 'zh-CN';
+    const configModule = require('./src/config');
+    this.apiKey = config.apiKey || configModule.api.apiKey;
+    this.name = config.name || configModule.agent.name;
+    this.version = config.version || configModule.agent.version;
+    this.logLevel = config.logLevel || configModule.agent.logLevel;
+    this.model = config.model || configModule.api.model;
+    this.provider = config.provider || configModule.api.provider;
+    this.language = config.language || configModule.agent.language;
     
     // 支持的语言
     this.supportedLanguages = {
@@ -35,8 +38,8 @@ class SmartAgent {
     // 初始化模块
     this.knowledgeManager = new KnowledgeManager();
     this.cacheManager = new CacheManager({
-      cacheExpiry: parseInt(process.env.CACHE_EXPIRY) || 3600000, // 默认1小时
-      cacheSizeLimit: parseInt(process.env.CACHE_SIZE_LIMIT) || 1000 // 缓存大小限制
+      cacheExpiry: configModule.cache.expiry,
+      cacheSizeLimit: configModule.cache.sizeLimit
     });
     this.apiManager = new APIManager({
       apiKey: this.apiKey,
@@ -86,13 +89,13 @@ class SmartAgent {
     };
     
     // 自学习功能
-    this.learningEnabled = process.env.LEARNING_ENABLED !== 'false';
+    this.learningEnabled = configModule.features.learning;
     
     // 情感分析
-    this.sentimentAnalysisEnabled = process.env.SENTIMENT_ANALYSIS_ENABLED !== 'false';
+    this.sentimentAnalysisEnabled = configModule.features.sentimentAnalysis;
     
     // 话题跟踪
-    this.topicTrackingEnabled = process.env.TOPIC_TRACKING_ENABLED !== 'false';
+    this.topicTrackingEnabled = configModule.features.topicTracking;
     this.currentTopic = null;
     this.topicHistory = [];
   }
@@ -103,9 +106,25 @@ class SmartAgent {
    * @param  {...any} args - 日志参数
    */
   log(level, ...args) {
-    if (['debug', 'info', 'error'].indexOf(level) >= ['debug', 'info', 'error'].indexOf(this.logLevel)) {
-      const timestamp = new Date().toISOString();
-      console.log(`[${timestamp}] [${this.name}] [${level.toUpperCase()}]`, ...args);
+    const logger = require('./src/services/logger');
+    const message = args.join(' ');
+    const meta = { agent: this.name };
+    
+    switch (level) {
+      case 'debug':
+        logger.debug(message, meta);
+        break;
+      case 'info':
+        logger.info(message, meta);
+        break;
+      case 'warn':
+        logger.warn(message, meta);
+        break;
+      case 'error':
+        logger.error(message, meta);
+        break;
+      default:
+        logger.info(message, meta);
     }
   }
 
@@ -392,10 +411,18 @@ class SmartAgent {
    */
   async processMessage(message) {
     try {
-      this.log('info', `[${this.name}] 收到消息: ${message}`);
+      // 安全验证
+      if (!securityManager.validateInput(message)) {
+        this.log('error', '无效的消息: 消息包含不安全的内容');
+        return '抱歉，我无法处理包含不安全内容的请求。';
+      }
+      
+      // 清理输入
+      const sanitizedMessage = securityManager.sanitizeInput(message);
+      this.log('info', `[${this.name}] 收到消息: ${sanitizedMessage}`);
       
       // 验证输入
-      if (!message || typeof message !== 'string' || message.trim() === '') {
+      if (!sanitizedMessage || typeof sanitizedMessage !== 'string' || sanitizedMessage.trim() === '') {
         this.log('error', '无效的消息: 消息为空或不是字符串');
         return '抱歉，我无法处理空的请求。';
       }
@@ -403,7 +430,7 @@ class SmartAgent {
       // 识别用户意图
       let intent;
       try {
-        intent = this.identifyUserIntent(message);
+        intent = this.identifyUserIntent(sanitizedMessage);
         this.log('debug', `用户意图: ${intent}`);
       } catch (intentError) {
         this.log('error', '意图识别错误:', intentError.message);
@@ -413,7 +440,7 @@ class SmartAgent {
       // 分析用户情感
       let sentiment;
       try {
-        sentiment = this.analyzeSentiment(message);
+        sentiment = this.analyzeSentiment(sanitizedMessage);
         this.log('debug', `用户情感: ${sentiment}`);
       } catch (sentimentError) {
         this.log('error', '情感分析错误:', sentimentError.message);
@@ -422,7 +449,7 @@ class SmartAgent {
       
       // 跟踪话题
       try {
-        const topic = this.trackTopic(message);
+        const topic = this.trackTopic(sanitizedMessage);
         if (topic) {
           this.log('debug', `当前话题: ${topic}`);
         }
@@ -433,9 +460,9 @@ class SmartAgent {
       // 处理学习意图
       if (intent === 'learning' && this.learningEnabled) {
         try {
-          const learnResult = this.learnFromUser(message);
+          const learnResult = this.learnFromUser(sanitizedMessage);
           if (learnResult) {
-            this.log('info', `学习成功: ${message}`);
+            this.log('info', `学习成功: ${sanitizedMessage}`);
             return learnResult;
           }
         } catch (learnError) {
@@ -446,13 +473,13 @@ class SmartAgent {
       // 处理模式切换意图
       if (intent === 'mode_switch') {
         try {
-          if (message.includes('友好')) {
+          if (sanitizedMessage.includes('友好')) {
             return this.setChatMode('friendly');
-          } else if (message.includes('专业')) {
+          } else if (sanitizedMessage.includes('专业')) {
             return this.setChatMode('professional');
-          } else if (message.includes('casual')) {
+          } else if (sanitizedMessage.includes('casual')) {
             return this.setChatMode('casual');
-          } else if (message.includes('默认')) {
+          } else if (sanitizedMessage.includes('默认')) {
             return this.setChatMode('default');
           }
         } catch (modeError) {
@@ -463,9 +490,9 @@ class SmartAgent {
       // 处理设置意图
       if (intent === 'settings') {
         try {
-          const settingsResult = this.handleUserPreferences(message);
+          const settingsResult = this.handleUserPreferences(sanitizedMessage);
           if (settingsResult) {
-            this.log('info', `设置成功: ${message}`);
+            this.log('info', `设置成功: ${sanitizedMessage}`);
             return settingsResult;
           }
         } catch (settingsError) {
@@ -481,7 +508,7 @@ class SmartAgent {
       // 生成响应
       let response;
       try {
-        response = await this.generateResponse(message);
+        response = await this.generateResponse(sanitizedMessage);
         // 确保响应有效
         if (!response || typeof response !== 'string' || response.trim() === '') {
           this.log('error', '生成的响应无效');
@@ -672,6 +699,106 @@ class SmartAgent {
       provider: this.provider,
       language: this.language
     };
+  }
+
+  /**
+   * 获取会话
+   * @param {string} sessionId - 会话ID
+   * @returns {object|null} 会话对象
+   */
+  getSession(sessionId) {
+    return sessionManager.getSession(sessionId);
+  }
+
+  /**
+   * 创建会话
+   * @param {string} sessionId - 会话ID
+   * @returns {object} 会话对象
+   */
+  createSession(sessionId) {
+    return sessionManager.createSession(sessionId);
+  }
+
+  /**
+   * 更新会话
+   * @param {string} sessionId - 会话ID
+   * @param {object} updates - 更新的内容
+   * @returns {object|null} 更新后的会话对象
+   */
+  updateSession(sessionId, updates) {
+    return sessionManager.updateSession(sessionId, updates);
+  }
+
+  /**
+   * 删除会话
+   * @param {string} sessionId - 会话ID
+   * @returns {boolean} 是否删除成功
+   */
+  deleteSession(sessionId) {
+    return sessionManager.deleteSession(sessionId);
+  }
+
+  /**
+   * 处理带有会话的消息
+   * @param {string} message - 用户消息
+   * @param {string} sessionId - 会话ID
+   * @returns {Promise<string>} 响应内容
+   */
+  async processMessageWithSession(message, sessionId) {
+    try {
+      // 验证会话ID
+      if (!securityManager.validateSessionId(sessionId)) {
+        this.log('error', '无效的会话ID');
+        return '抱歉，会话无效，请重新开始对话。';
+      }
+
+      // 获取或创建会话
+      let session = this.getSession(sessionId);
+      if (!session) {
+        session = this.createSession(sessionId);
+        this.log('info', `创建新会话: ${sessionId}`);
+      }
+
+      // 处理消息
+      const response = await this.processMessage(message);
+
+      // 更新会话
+      session.conversationHistory.push({ user: securityManager.sanitizeInput(message), bot: response });
+      if (session.conversationHistory.length > 20) {
+        session.conversationHistory.shift();
+      }
+      session.currentTopic = this.currentTopic;
+      session.topicHistory = this.topicHistory;
+
+      this.updateSession(sessionId, session);
+
+      return response;
+    } catch (error) {
+      this.log('error', '处理会话消息错误:', error.message, error.stack);
+      return '抱歉，我在处理您的请求时遇到了问题。';
+    }
+  }
+
+  /**
+   * 清理过期会话
+   */
+  cleanupExpiredSessions() {
+    sessionManager.cleanupExpiredSessions();
+  }
+
+  /**
+   * 获取会话数量
+   * @returns {number} 会话数量
+   */
+  getSessionCount() {
+    return sessionManager.getSessionCount();
+  }
+
+  /**
+   * 清空所有会话
+   */
+  clearAllSessions() {
+    sessionManager.clearAllSessions();
   }
 }
 

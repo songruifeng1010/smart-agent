@@ -1,4 +1,4 @@
-const { getRandomResponse, handleCalculation, handleUnitConversion, handleWeatherQuery, handleNewsQuery, handleDateCalculation, generateChatResponse, getFallbackResponse } = require('../../utils');
+const { getRandomResponse, handleCalculation, handleUnitConversion, handleWeatherQuery, handleNewsQuery, handleDateCalculation, generateChatResponse, getFallbackResponse } = require('../utils');
 
 /**
  * 响应生成模块 - 生成智能体响应

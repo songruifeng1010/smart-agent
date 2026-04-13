@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  smart-agent:
+    build: .
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - HOST=0.0.0.0
+      - API_KEY=${API_KEY:-your_api_key_here}
+      - MODEL=${MODEL:-glm-4}
+      - PROVIDER=${PROVIDER:-zhipu}
+      - AGENT_NAME=${AGENT_NAME:-SmartAgent}
+      - AGENT_VERSION=${AGENT_VERSION:-4.0.0}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LANGUAGE=${LANGUAGE:-zh-CN}
+      - CACHE_EXPIRY=${CACHE_EXPIRY:-3600000}
+      - CACHE_SIZE_LIMIT=${CACHE_SIZE_LIMIT:-1000}
+      - LEARNING_ENABLED=${LEARNING_ENABLED:-true}
+      - SENTIMENT_ANALYSIS_ENABLED=${SENTIMENT_ANALYSIS_ENABLED:-true}
+      - TOPIC_TRACKING_ENABLED=${TOPIC_TRACKING_ENABLED:-true}
+      - KEEP_ALIVE_ENABLED=${KEEP_ALIVE_ENABLED:-true}
+      - API_TIMEOUT=${API_TIMEOUT:-30000}
+    restart: unless-stopped

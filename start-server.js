@@ -67,7 +67,7 @@ function handleRequest(req, res) {
             res.end(JSON.stringify({ error: 'Request body too large' }));
             req.destroy();
           }
-          body += chunk.toString();
+          body += chunk.toString('utf8');
         });
         
         req.on('end', async () => {

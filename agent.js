@@ -400,48 +400,75 @@ class SmartAgent {
       }
       
       // 识别用户意图
-      const intent = this.identifyUserIntent(message);
-      this.log('debug', `用户意图: ${intent}`);
+      let intent;
+      try {
+        intent = this.identifyUserIntent(message);
+        this.log('debug', `用户意图: ${intent}`);
+      } catch (intentError) {
+        this.log('error', '意图识别错误:', intentError.message);
+        intent = 'general';
+      }
       
       // 分析用户情感
-      const sentiment = this.analyzeSentiment(message);
-      this.log('debug', `用户情感: ${sentiment}`);
-      console.log(`情感分析结果: ${sentiment}`);
+      let sentiment;
+      try {
+        sentiment = this.analyzeSentiment(message);
+        this.log('debug', `用户情感: ${sentiment}`);
+      } catch (sentimentError) {
+        this.log('error', '情感分析错误:', sentimentError.message);
+        sentiment = 'neutral';
+      }
       
       // 跟踪话题
-      const topic = this.trackTopic(message);
-      if (topic) {
-        this.log('debug', `当前话题: ${topic}`);
+      try {
+        const topic = this.trackTopic(message);
+        if (topic) {
+          this.log('debug', `当前话题: ${topic}`);
+        }
+      } catch (topicError) {
+        this.log('error', '话题跟踪错误:', topicError.message);
       }
       
       // 处理学习意图
       if (intent === 'learning' && this.learningEnabled) {
-        const learnResult = this.learnFromUser(message);
-        if (learnResult) {
-          this.log('info', `学习成功: ${message}`);
-          return learnResult;
+        try {
+          const learnResult = this.learnFromUser(message);
+          if (learnResult) {
+            this.log('info', `学习成功: ${message}`);
+            return learnResult;
+          }
+        } catch (learnError) {
+          this.log('error', '学习处理错误:', learnError.message);
         }
       }
       
       // 处理模式切换意图
       if (intent === 'mode_switch') {
-        if (message.includes('友好')) {
-          return this.setChatMode('friendly');
-        } else if (message.includes('专业')) {
-          return this.setChatMode('professional');
-        } else if (message.includes('casual')) {
-          return this.setChatMode('casual');
-        } else if (message.includes('默认')) {
-          return this.setChatMode('default');
+        try {
+          if (message.includes('友好')) {
+            return this.setChatMode('friendly');
+          } else if (message.includes('专业')) {
+            return this.setChatMode('professional');
+          } else if (message.includes('casual')) {
+            return this.setChatMode('casual');
+          } else if (message.includes('默认')) {
+            return this.setChatMode('default');
+          }
+        } catch (modeError) {
+          this.log('error', '模式切换错误:', modeError.message);
         }
       }
       
       // 处理设置意图
       if (intent === 'settings') {
-        const settingsResult = this.handleUserPreferences(message);
-        if (settingsResult) {
-          this.log('info', `设置成功: ${message}`);
-          return settingsResult;
+        try {
+          const settingsResult = this.handleUserPreferences(message);
+          if (settingsResult) {
+            this.log('info', `设置成功: ${message}`);
+            return settingsResult;
+          }
+        } catch (settingsError) {
+          this.log('error', '设置处理错误:', settingsError.message);
         }
       }
       
@@ -450,26 +477,40 @@ class SmartAgent {
         return '我可以帮助您做以下事情：\n1. 回答各种问题\n2. 进行数学计算\n3. 单位转换\n4. 讲笑话\n5. 学习新知识\n6. 切换对话模式\n7. 设置偏好\n\n请问您需要什么帮助？';
       }
       
-      const response = await this.generateResponse(message);
+      // 生成响应
+      let response;
+      try {
+        response = await this.generateResponse(message);
+        // 确保响应有效
+        if (!response || typeof response !== 'string' || response.trim() === '') {
+          this.log('error', '生成的响应无效');
+          response = '抱歉，我在处理您的请求时遇到了问题。';
+        }
+      } catch (responseError) {
+        this.log('error', '生成响应错误:', responseError.message);
+        response = '抱歉，我在处理您的请求时遇到了问题。';
+      }
       
       // 根据情感调整响应
-      if (sentiment === 'negative') {
-        const adjustedResponse = `我理解您现在可能感到不太开心。${response}`;
-        this.log('info', `[${this.name}] 回复: ${adjustedResponse}`);
-        console.log(`情感分析结果: negative, 调整后的响应: ${adjustedResponse}`);
-        return adjustedResponse;
-      } else if (sentiment === 'positive') {
-        const adjustedResponse = `看到您心情不错，我也很开心！${response}`;
-        this.log('info', `[${this.name}] 回复: ${adjustedResponse}`);
-        console.log(`情感分析结果: positive, 调整后的响应: ${adjustedResponse}`);
-        return adjustedResponse;
-      } else {
-        this.log('info', `[${this.name}] 回复: ${response}`);
-        console.log(`情感分析结果: neutral, 原始响应: ${response}`);
+      try {
+        if (sentiment === 'negative') {
+          const adjustedResponse = `我理解您现在可能感到不太开心。${response}`;
+          this.log('info', `[${this.name}] 回复: ${adjustedResponse}`);
+          return adjustedResponse;
+        } else if (sentiment === 'positive') {
+          const adjustedResponse = `看到您心情不错，我也很开心！${response}`;
+          this.log('info', `[${this.name}] 回复: ${adjustedResponse}`);
+          return adjustedResponse;
+        } else {
+          this.log('info', `[${this.name}] 回复: ${response}`);
+          return response;
+        }
+      } catch (adjustError) {
+        this.log('error', '调整响应错误:', adjustError.message);
         return response;
       }
     } catch (error) {
-      this.log('error', '处理消息错误:', error.message);
+      this.log('error', '处理消息错误:', error.message, error.stack);
       return '抱歉，我在处理您的请求时遇到了问题。';
     }
   }

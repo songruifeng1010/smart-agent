@@ -609,23 +609,37 @@ class APIManager {
                 return;
               }
               
+              this.log('debug', 'API响应数据:', data);
               const responseData = JSON.parse(data);
               if (res.statusCode !== 200) {
                 this.log('error', 'API错误:', responseData);
                 resolve('抱歉，我在处理您的请求时遇到了问题。');
               } else {
                 this.log('info', 'API响应成功');
+                // 智谱AI的响应格式可能不同，尝试多种格式
+                let response;
                 if (responseData.choices && responseData.choices.length > 0) {
-                  const response = responseData.choices[0].message.content;
-                  // 安全地设置缓存
-                  if (cache) {
-                    cache.setCache(cacheKey, response);
-                  }
-                  resolve(response);
+                  // OpenAI格式
+                  response = responseData.choices[0].message.content;
+                } else if (responseData.data && responseData.data.length > 0) {
+                  // 智谱AI可能的格式
+                  response = responseData.data[0].content;
+                } else if (responseData.result) {
+                  // 百度文心一言格式
+                  response = responseData.result;
+                } else if (responseData.output) {
+                  // 其他格式
+                  response = responseData.output;
                 } else {
-                  this.log('error', 'API响应格式错误: 缺少choices字段');
+                  this.log('error', 'API响应格式错误: 无法解析响应');
                   resolve('抱歉，我在处理您的请求时遇到了问题。');
+                  return;
                 }
+                // 安全地设置缓存
+                if (cache) {
+                  cache.setCache(cacheKey, response);
+                }
+                resolve(response);
               }
             } catch (parseError) {
               this.log('error', '解析响应失败:', parseError);
@@ -930,7 +944,7 @@ class APIManager {
    * @returns {boolean} API密钥是否有效
    */
   isApiKeyValid() {
-    return this.apiKey && this.apiKey !== 'your_openai_api_key_here';
+    return this.apiKey && this.apiKey !== 'your_openai_api_key_here' && this.apiKey !== 'your_api_key_here';
   }
 
   /**

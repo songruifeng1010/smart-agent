@@ -21,12 +21,12 @@ console.log('正在初始化SmartAgent...');
 let agent;
 try {
   agent = new SmartAgent({
-    apiKey: process.env.API_KEY || 'your_openai_api_key_here',
+    apiKey: process.env.API_KEY || 'your_api_key_here',
     name: 'SmartAgent',
-    version: '2.0.0',
+    version: '3.0.0',
     logLevel: 'debug', // 修改为debug级别
-    model: process.env.MODEL || 'gpt-3.5-turbo',
-    provider: process.env.PROVIDER || 'openai'
+    model: process.env.MODEL || 'glm-4', // 默认使用智谱AI的模型
+    provider: process.env.PROVIDER || 'zhipu' // 默认使用智谱AI
   });
   console.log('SmartAgent初始化成功');
   console.log('当前配置:', agent.getConfig());

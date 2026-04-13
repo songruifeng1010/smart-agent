@@ -45,6 +45,30 @@ class APIManager {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.apiKey}`
         }
+      },
+      // 国内大模型
+      zhipu: {
+        baseURL: 'open.bigmodel.cn',
+        path: '/api/messages',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        }
+      },
+      baidu: {
+        baseURL: 'aip.baidubce.com',
+        path: '/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/eb-instant',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      },
+      iflytek: {
+        baseURL: 'spark-api.xf-yun.com',
+        path: '/v2.1/chat',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        }
       }
     };
   }
@@ -527,6 +551,345 @@ class APIManager {
   }
 
   /**
+   * 调用智谱AI API
+   * @param {string} prompt - 用户输入
+   * @param {string} cacheKey - 缓存键
+   * @param {object} cache - 缓存对象
+   * @param {string} agentName - 智能体名称
+   * @returns {Promise<string>} API响应
+   */
+  callZhipuAPI(prompt, cacheKey, cache, agentName) {
+    return new Promise((resolve) => {
+      try {
+        const postData = JSON.stringify({
+          model: this.model || 'glm-4',
+          messages: [
+            {
+              role: 'system',
+              content: `你是${agentName}，一个智能对话助手。你能够理解并回答用户的各种问题，提供准确且有用的信息，并且能够进行自然的对话。`
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 1000
+        });
+
+        const providerConfig = this.providers.zhipu;
+        const options = {
+          hostname: providerConfig.baseURL,
+          port: 443,
+          path: providerConfig.path,
+          method: 'POST',
+          headers: {
+            ...providerConfig.headers,
+            'Content-Length': Buffer.byteLength(postData)
+          },
+          timeout: 30000
+        };
+
+        this.log('debug', '正在发送请求到:', options.hostname + options.path);
+        
+        const req = https.request(options, (res) => {
+          this.log('info', 'API响应状态:', res.statusCode);
+          
+          let data = '';
+          res.on('data', (chunk) => {
+            data += chunk;
+          });
+
+          res.on('end', () => {
+            try {
+              // 检查响应长度
+              if (!data || data.length === 0) {
+                this.log('error', 'API响应为空');
+                resolve('抱歉，我在处理您的请求时遇到了问题。');
+                return;
+              }
+              
+              const responseData = JSON.parse(data);
+              if (res.statusCode !== 200) {
+                this.log('error', 'API错误:', responseData);
+                resolve('抱歉，我在处理您的请求时遇到了问题。');
+              } else {
+                this.log('info', 'API响应成功');
+                if (responseData.choices && responseData.choices.length > 0) {
+                  const response = responseData.choices[0].message.content;
+                  // 安全地设置缓存
+                  if (cache) {
+                    cache.setCache(cacheKey, response);
+                  }
+                  resolve(response);
+                } else {
+                  this.log('error', 'API响应格式错误: 缺少choices字段');
+                  resolve('抱歉，我在处理您的请求时遇到了问题。');
+                }
+              }
+            } catch (parseError) {
+              this.log('error', '解析响应失败:', parseError);
+              resolve('抱歉，我在处理您的请求时遇到了问题。');
+            }
+          });
+        });
+
+        req.on('error', (error) => {
+          this.log('error', '请求错误:', error.message);
+          if (error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+            resolve('抱歉，网络连接失败，请检查您的网络连接。');
+          } else {
+            resolve('抱歉，我在处理您的请求时遇到了问题。');
+          }
+        });
+
+        req.on('timeout', () => {
+          this.log('error', '请求超时');
+          req.destroy();
+          resolve('抱歉，请求超时，请稍后再试。');
+        });
+
+        req.write(postData);
+        req.end();
+      } catch (error) {
+        this.log('error', 'API请求准备错误:', error.message);
+        resolve('抱歉，我在处理您的请求时遇到了问题。');
+      }
+    });
+  }
+
+  /**
+   * 调用百度文心一言API
+   * @param {string} prompt - 用户输入
+   * @param {string} cacheKey - 缓存键
+   * @param {object} cache - 缓存对象
+   * @param {string} agentName - 智能体名称
+   * @returns {Promise<string>} API响应
+   */
+  callBaiduAPI(prompt, cacheKey, cache, agentName) {
+    return new Promise((resolve) => {
+      try {
+        // 百度API需要在URL中添加API Key
+        const apiKey = this.apiKey;
+        const providerConfig = this.providers.baidu;
+        const options = {
+          hostname: providerConfig.baseURL,
+          port: 443,
+          path: `${providerConfig.path}?access_token=${apiKey}`,
+          method: 'POST',
+          headers: {
+            ...providerConfig.headers,
+            'Content-Length': 0 // 会在下面重新计算
+          },
+          timeout: 30000
+        };
+
+        const postData = JSON.stringify({
+          messages: [
+            {
+              role: 'system',
+              content: `你是${agentName}，一个智能对话助手。你能够理解并回答用户的各种问题，提供准确且有用的信息，并且能够进行自然的对话。`
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 1000
+        });
+
+        options.headers['Content-Length'] = Buffer.byteLength(postData);
+
+        this.log('debug', '正在发送请求到:', options.hostname + options.path);
+        
+        const req = https.request(options, (res) => {
+          this.log('info', 'API响应状态:', res.statusCode);
+          
+          let data = '';
+          res.on('data', (chunk) => {
+            data += chunk;
+          });
+
+          res.on('end', () => {
+            try {
+              // 检查响应长度
+              if (!data || data.length === 0) {
+                this.log('error', 'API响应为空');
+                resolve('抱歉，我在处理您的请求时遇到了问题。');
+                return;
+              }
+              
+              const responseData = JSON.parse(data);
+              if (res.statusCode !== 200) {
+                this.log('error', 'API错误:', responseData);
+                resolve('抱歉，我在处理您的请求时遇到了问题。');
+              } else {
+                this.log('info', 'API响应成功');
+                if (responseData.result) {
+                  const response = responseData.result;
+                  // 安全地设置缓存
+                  if (cache) {
+                    cache.setCache(cacheKey, response);
+                  }
+                  resolve(response);
+                } else {
+                  this.log('error', 'API响应格式错误: 缺少result字段');
+                  resolve('抱歉，我在处理您的请求时遇到了问题。');
+                }
+              }
+            } catch (parseError) {
+              this.log('error', '解析响应失败:', parseError);
+              resolve('抱歉，我在处理您的请求时遇到了问题。');
+            }
+          });
+        });
+
+        req.on('error', (error) => {
+          this.log('error', '请求错误:', error.message);
+          if (error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+            resolve('抱歉，网络连接失败，请检查您的网络连接。');
+          } else {
+            resolve('抱歉，我在处理您的请求时遇到了问题。');
+          }
+        });
+
+        req.on('timeout', () => {
+          this.log('error', '请求超时');
+          req.destroy();
+          resolve('抱歉，请求超时，请稍后再试。');
+        });
+
+        req.write(postData);
+        req.end();
+      } catch (error) {
+        this.log('error', 'API请求准备错误:', error.message);
+        resolve('抱歉，我在处理您的请求时遇到了问题。');
+      }
+    });
+  }
+
+  /**
+   * 调用讯飞星火API
+   * @param {string} prompt - 用户输入
+   * @param {string} cacheKey - 缓存键
+   * @param {object} cache - 缓存对象
+   * @param {string} agentName - 智能体名称
+   * @returns {Promise<string>} API响应
+   */
+  callIflytekAPI(prompt, cacheKey, cache, agentName) {
+    return new Promise((resolve) => {
+      try {
+        const postData = JSON.stringify({
+          header: {
+            app_id: this.apiKey.split('.')[0], // 讯飞API需要app_id
+            uid: 'user'
+          },
+          parameter: {
+            chat: {
+              domain: 'general',
+              temperature: 0.7,
+              max_tokens: 1000
+            }
+          },
+          payload: {
+            message: {
+              text: [
+                {
+                  role: 'system',
+                  content: `你是${agentName}，一个智能对话助手。你能够理解并回答用户的各种问题，提供准确且有用的信息，并且能够进行自然的对话。`
+                },
+                {
+                  role: 'user',
+                  content: prompt
+                }
+              ]
+            }
+          }
+        });
+
+        const providerConfig = this.providers.iflytek;
+        const options = {
+          hostname: providerConfig.baseURL,
+          port: 443,
+          path: providerConfig.path,
+          method: 'POST',
+          headers: {
+            ...providerConfig.headers,
+            'Content-Length': Buffer.byteLength(postData)
+          },
+          timeout: 30000
+        };
+
+        this.log('debug', '正在发送请求到:', options.hostname + options.path);
+        
+        const req = https.request(options, (res) => {
+          this.log('info', 'API响应状态:', res.statusCode);
+          
+          let data = '';
+          res.on('data', (chunk) => {
+            data += chunk;
+          });
+
+          res.on('end', () => {
+            try {
+              // 检查响应长度
+              if (!data || data.length === 0) {
+                this.log('error', 'API响应为空');
+                resolve('抱歉，我在处理您的请求时遇到了问题。');
+                return;
+              }
+              
+              const responseData = JSON.parse(data);
+              if (res.statusCode !== 200) {
+                this.log('error', 'API错误:', responseData);
+                resolve('抱歉，我在处理您的请求时遇到了问题。');
+              } else {
+                this.log('info', 'API响应成功');
+                if (responseData.payload && responseData.payload.message && responseData.payload.message.text) {
+                  const response = responseData.payload.message.text[0].content;
+                  // 安全地设置缓存
+                  if (cache) {
+                    cache.setCache(cacheKey, response);
+                  }
+                  resolve(response);
+                } else {
+                  this.log('error', 'API响应格式错误: 缺少payload.message.text字段');
+                  resolve('抱歉，我在处理您的请求时遇到了问题。');
+                }
+              }
+            } catch (parseError) {
+              this.log('error', '解析响应失败:', parseError);
+              resolve('抱歉，我在处理您的请求时遇到了问题。');
+            }
+          });
+        });
+
+        req.on('error', (error) => {
+          this.log('error', '请求错误:', error.message);
+          if (error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+            resolve('抱歉，网络连接失败，请检查您的网络连接。');
+          } else {
+            resolve('抱歉，我在处理您的请求时遇到了问题。');
+          }
+        });
+
+        req.on('timeout', () => {
+          this.log('error', '请求超时');
+          req.destroy();
+          resolve('抱歉，请求超时，请稍后再试。');
+        });
+
+        req.write(postData);
+        req.end();
+      } catch (error) {
+        this.log('error', 'API请求准备错误:', error.message);
+        resolve('抱歉，我在处理您的请求时遇到了问题。');
+      }
+    });
+  }
+
+  /**
    * 调用API
    * @param {string} prompt - 用户输入
    * @param {string} cacheKey - 缓存键
@@ -545,6 +908,12 @@ class APIManager {
           return await this.callWithRetry(() => this.callGoogleAPI(prompt, cacheKey, cache, agentName));
         case 'deepseek':
           return await this.callWithRetry(() => this.callDeepSeekAPI(prompt, cacheKey, cache, agentName));
+        case 'zhipu':
+          return await this.callWithRetry(() => this.callZhipuAPI(prompt, cacheKey, cache, agentName));
+        case 'baidu':
+          return await this.callWithRetry(() => this.callBaiduAPI(prompt, cacheKey, cache, agentName));
+        case 'iflytek':
+          return await this.callWithRetry(() => this.callIflytekAPI(prompt, cacheKey, cache, agentName));
         case 'openai':
         default:
           return await this.callWithRetry(() => this.callOpenAIAPI(prompt, cacheKey, cache, agentName));
